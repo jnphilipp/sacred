@@ -5,6 +5,7 @@ from __future__ import division, print_function, unicode_literals
 from sacred.commandline_options import CommandLineOption
 
 from sacred.observers.base import RunObserver
+from sacred.observers.json import JSONObserver
 import sacred.optional as opt
 
 if opt.has_pymongo:
@@ -23,4 +24,4 @@ else:
                               'missing pymongo dependency')
 
 
-__all__ = ('RunObserver', 'MongoObserver')
+__all__ = ('RunObserver', 'JSONObserver', 'MongoObserver')
