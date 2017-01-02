@@ -29,7 +29,6 @@ class JSONObserver(RunObserver):
             'artifacts': [],
             'captured_out': '',
             'info': {},
-            'heartbeat': []
         }
 
         if not os.path.exists(os.path.join(self.base_dir, self.run_entry['experiment']['name'])):
@@ -44,7 +43,6 @@ class JSONObserver(RunObserver):
     def heartbeat_event(self, info, captured_out, beat_time):
         self.run_entry['info'] = info
         self.run_entry['captured_out'] = captured_out
-        self.run_entry['heartbeat'].append(beat_time)
         self.save()
 
 
