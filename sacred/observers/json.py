@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import csv
 import json
 import os
 
@@ -14,6 +15,7 @@ class JSONObserver(RunObserver):
         self.number_format = number_format
         self.indent = indent
         self.experiment_dir = None
+        self.nb_experiment = -1
         self.run_entry = None
 
 
@@ -31,11 +33,12 @@ class JSONObserver(RunObserver):
             'info': {},
         }
 
-        if not os.path.exists(os.path.join(self.base_dir, self.run_entry['experiment']['name'])):
-            os.makedirs(os.path.join(self.base_dir, self.run_entry['experiment']['name']))
+        experiments_dir = os.path.join(self.base_dir, self.run_entry['experiment']['name'])
+        if not os.path.exists(experiments_dir):
+            os.makedirs(experiments_dir)
 
-        nb_experiment = sum(1 for e in os.scandir(os.path.join(self.base_dir, self.run_entry['experiment']['name'])) if e.is_dir())
-        self.experiment_dir = os.path.join(self.base_dir, self.run_entry['experiment']['name'], self.number_format % nb_experiment)
+        self.nb_experiment = sum(1 for e in os.scandir(experiments_dir) if e.is_dir())
+        self.experiment_dir = os.path.join(self.base_dir, self.run_entry['experiment']['name'], self.number_format % self.nb_experiment)
         os.makedirs(self.experiment_dir)
         self.save()
 
@@ -51,6 +54,27 @@ class JSONObserver(RunObserver):
         self.run_entry['result'] = result
         self.run_entry['status'] = 'COMPLETED'
         self.save()
+
+        if result:
+            experiments_path = os.path.join(self.base_dir, self.run_entry['experiment']['name'], 'experiments.csv')
+            fields = ['experiment'] + list(result.keys())
+            experiments = []
+            if os.path.exists(experiments_path):
+                with open(experiments_path, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    fields = reader.fieldnames
+                    for k in result.keys():
+                        if k not in fields:
+                            fields.append(k)
+                    for row in reader:
+                        experiments.append(row)
+
+            with open(experiments_path, 'w', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fields, dialect='unix')
+                writer.writeheader()
+                writer.writerows(experiments)
+                result.update(experiment=self.number_format % self.nb_experiment)
+                writer.writerow(result)
 
 
     def interrupted_event(self, interrupt_time):
