@@ -5,7 +5,6 @@ import json
 import os
 
 from bson import json_util
-from sacred.dependencies import get_digest
 from sacred.observers.base import RunObserver
 
 
@@ -18,29 +17,49 @@ class JSONObserver(RunObserver):
         self.nb_experiment = -1
         self.run_entry = None
 
+    def create_dirs(self, name, _id):
+        experiments_dir = os.path.join(self.base_dir, name)
+        if not os.path.exists(experiments_dir):
+            os.makedirs(experiments_dir)
 
-    def started_event(self, ex_info, host_info, start_time, config, comment):
+        if _id is None:
+            self.nb_experiment = sum(1 for e in os.scandir(experiments_dir) if e.is_dir())
+            self.experiment_dir = os.path.join(self.base_dir, name, self.number_format % self.nb_experiment)
+            os.makedirs(self.experiment_dir)
+
+
+    def queued_event(self, ex_info, command, queue_time, config, meta_info, _id):
+        self.create_dirs(ex_info['name'], _id)
         self.run_entry = {
+            '_id': _id,
             'experiment': dict(ex_info),
+            'command': command,
+            'meta': meta_info,
+            'status': 'QUEUED',
+            'config': config
+        }
+        self.save()
+        return self.nb_experiment if _id is None else _id
+
+
+    def started_event(self, ex_info, command, host_info, start_time, config, meta_info, _id):
+        self.create_dirs(ex_info['name'], _id)
+        self.run_entry = {
+            '_id': _id,
+            'experiment': dict(ex_info),
+            'command': command,
             'host': dict(host_info),
-            'start_time': start_time,
+            'start_time': start_time.isoformat(),
             'config': config,
-            'comment': comment,
+            'meta': meta_info,
             'status': 'RUNNING',
             'resources': [],
             'artifacts': [],
             'captured_out': '',
             'info': {},
         }
-
-        experiments_dir = os.path.join(self.base_dir, self.run_entry['experiment']['name'])
-        if not os.path.exists(experiments_dir):
-            os.makedirs(experiments_dir)
-
-        self.nb_experiment = sum(1 for e in os.scandir(experiments_dir) if e.is_dir())
-        self.experiment_dir = os.path.join(self.base_dir, self.run_entry['experiment']['name'], self.number_format % self.nb_experiment)
-        os.makedirs(self.experiment_dir)
         self.save()
+        return self.nb_experiment if _id is None else _id
 
 
     def heartbeat_event(self, info, captured_out, beat_time):
@@ -50,7 +69,7 @@ class JSONObserver(RunObserver):
 
 
     def completed_event(self, stop_time, result):
-        self.run_entry['stop_time'] = stop_time
+        self.run_entry['stop_time'] = stop_time.isoformat()
         self.run_entry['result'] = result
         self.run_entry['status'] = 'COMPLETED'
         self.save()
@@ -73,31 +92,30 @@ class JSONObserver(RunObserver):
                 writer = csv.DictWriter(f, fields, dialect='unix')
                 writer.writeheader()
                 writer.writerows(experiments)
-                result.update(experiment=self.number_format % self.nb_experiment)
+                result['experiment'] = self.number_format % self.nb_experiment
                 writer.writerow(result)
 
 
-    def interrupted_event(self, interrupt_time):
-        self.run_entry['stop_time'] = interrupt_time
-        self.run_entry['status'] = 'INTERRUPTED'
+    def interrupted_event(self, interrupt_time, status):
+        self.run_entry['stop_time'] = interrupt_time.isoformat()
+        self.run_entry['status'] = status
         self.save()
 
 
     def failed_event(self, fail_time, fail_trace):
-        self.run_entry['stop_time'] = fail_time
+        self.run_entry['stop_time'] = fail_time.isoformat()
         self.run_entry['status'] = 'FAILED'
         self.run_entry['fail_trace'] = fail_trace
         self.save()
 
 
     def resource_event(self, filename):
-        md5hash = get_digest(filename)
-        self.run_entry['resources'].append((filename, md5hash))
+        self.run_entry['resources'].append(filename)
         self.save()
 
 
-    def artifact_event(self, filename):
-        self.run_entry['artifacts'].append(filename)
+    def artifact_event(self, name, filename):
+        self.run_entry['artifacts'].append(name)
         self.save()
 
 
