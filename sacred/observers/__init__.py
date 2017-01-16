@@ -65,9 +65,5 @@ else:
     SlackObserver = opt.MissingDependencyMock('requests')
 
 
-<<<<<<< HEAD
-__all__ = ('RunObserver', 'JSONObserver', 'MongoObserver')
-=======
-__all__ = ('FileStorageObserver', 'RunObserver', 'MongoObserver',
+__all__ = ('FileStorageObserver', 'JSONObserver', 'RunObserver', 'MongoObserver',
            'SqlObserver', 'TinyDbObserver', 'TinyDbReader', 'SlackObserver')
->>>>>>> 56accc14c9758a8f7cb10d8fe87ca39ea9672b1e
