@@ -45,12 +45,13 @@ Contents
    quickstart
    experiment
    configuration
-   config_injection
-   command-line
+   command_line
+   collected_information
    observers
    randomness
    logging
    ingredients
+   optional
    examples
    apidoc
    internals

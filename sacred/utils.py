@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 # coding=utf-8
 from __future__ import division, print_function, unicode_literals
+
 import collections
 import logging
 import os.path
 import re
+import subprocess
 import sys
 import traceback as tb
+from functools import partial
 from contextlib import contextmanager
 
-from six import StringIO
 import wrapt
+
+from sacred.optional import libc
 
 __sacred__ = True  # marks files that should be filtered from stack traces
 
@@ -19,7 +23,31 @@ NO_LOGGER.disabled = 1
 
 PATHCHANGE = object()
 
-PYTHON_IDENTIFIER = re.compile("^[a-zA-Z][_a-zA-Z0-9]*$")
+PYTHON_IDENTIFIER = re.compile("^[a-zA-Z_][_a-zA-Z0-9]*$")
+
+# A PY2 compatible FileNotFoundError
+if sys.version_info[0] == 2:
+    import errno
+
+    class FileNotFoundError(IOError):
+        def __init__(self, msg):
+            super(FileNotFoundError, self).__init__(errno.ENOENT, msg)
+else:
+    # Reassign so that we can import it from here
+    FileNotFoundError = FileNotFoundError
+
+
+def flush():
+    """Try to flush all stdio buffers, both from python and from C."""
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except (AttributeError, ValueError, IOError):
+        pass  # unsupported
+    try:
+        libc.fflush(None)
+    except (AttributeError, ValueError, IOError):
+        pass  # unsupported
 
 
 class CircularDependencyError(Exception):
@@ -30,12 +58,33 @@ class ObserverError(Exception):
     """Error that an observer raises but that should not make the run fail."""
 
 
+class SacredInterrupt(Exception):
+    """Base-Class for all custom interrupts.
+
+    For more information see :ref:`custom_interrupts`.
+    """
+
+    STATUS = "INTERRUPTED"
+
+
+class TimeoutInterrupt(SacredInterrupt):
+    """Signal a that the experiment timed out.
+
+    This exception can be used in client code to indicate that the run
+    exceeded its time limit and has been interrupted because of that.
+    The status of the interrupted run will then be set to ``TIMEOUT``.
+
+    For more information see :ref:`custom_interrupts`.
+    """
+
+    STATUS = "TIMEOUT"
+
+
 def create_basic_stream_logger():
     logger = logging.getLogger('')
     logger.setLevel(logging.INFO)
     logger.handlers = []
     ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
     formatter = logging.Formatter('%(levelname)s - %(name)s - %(message)s')
     ch.setFormatter(formatter)
     logger.addHandler(ch)
@@ -60,54 +109,93 @@ def recursive_update(d, u):
     return d
 
 
-class Tee(object):
-    def __init__(self, out1, out2):
-        for attr in ['encoding', 'errors', 'name', 'mode', 'closed',
-                     'line_buffering', 'newlines', 'softspace']:
-            setattr(self, attr, getattr(out1, attr, None))
-        self.out1 = out1
-        self.out2 = out2
-
-    def write(self, data):
-        self.out1.write(data)
-        self.out2.write(data)
-
-    def flush(self):
-        self.out1.flush()
-        self.out2.flush()
-
-
+# Duplicate stdout and stderr to a file. Inspired by:
+# http://eli.thegreenplace.net/2015/redirecting-all-kinds-of-stdout-in-python/
+# http://stackoverflow.com/a/651718/1388435
+# http://stackoverflow.com/a/22434262/1388435
 @contextmanager
-def tee_output():
-    out = StringIO()
-    sys.stdout = Tee(sys.stdout, out)
-    sys.stderr = Tee(sys.stderr, out)
-    yield out
-    sys.stdout = sys.stdout.out1
-    sys.stderr = sys.stderr.out1
-    out.close()
+def tee_output(target):
+    original_stdout_fd = 1
+    original_stderr_fd = 2
+
+    # Save a copy of the original stdout and stderr file descriptors
+    saved_stdout_fd = os.dup(original_stdout_fd)
+    saved_stderr_fd = os.dup(original_stderr_fd)
+
+    target_fd = target.fileno()
+
+    final_output = []
+
+    try:
+        try:
+            tee_stdout = subprocess.Popen(
+                ['tee', '-a', '/dev/stderr'],
+                stdin=subprocess.PIPE, stderr=target_fd, stdout=1)
+            tee_stderr = subprocess.Popen(
+                ['tee', '-a', '/dev/stderr'],
+                stdin=subprocess.PIPE, stderr=target_fd, stdout=2)
+        except (FileNotFoundError, OSError):
+            tee_stdout = subprocess.Popen(
+                [sys.executable, "-m", "sacred.pytee"],
+                stdin=subprocess.PIPE, stderr=target_fd)
+            tee_stderr = subprocess.Popen(
+                [sys.executable, "-m", "sacred.pytee"],
+                stdin=subprocess.PIPE, stdout=target_fd)
+
+        flush()
+        os.dup2(tee_stdout.stdin.fileno(), original_stdout_fd)
+        os.dup2(tee_stderr.stdin.fileno(), original_stderr_fd)
+
+        yield final_output  # let the caller do their printing
+        flush()
+
+        # then redirect stdout back to the saved fd
+        tee_stdout.stdin.close()
+        tee_stderr.stdin.close()
+
+        # restore original fds
+        os.dup2(saved_stdout_fd, original_stdout_fd)
+        os.dup2(saved_stderr_fd, original_stderr_fd)
+
+        tee_stdout.wait()
+        tee_stderr.wait()
+    finally:
+        os.close(saved_stdout_fd)
+        os.close(saved_stderr_fd)
+        target.flush()
+        target.seek(0)
+        final_output.append(target.read().decode())
 
 
-def iterate_flattened_separately(dictionary):
+def iterate_flattened_separately(dictionary, manually_sorted_keys=None):
     """
     Recursively iterate over the items of a dictionary in a special order.
 
-    First iterate over all items that are non-dictionary values
-    (sorted by keys), then over the rest (sorted by keys), providing full
-    dotted paths for every leaf.
+    First iterate over manually sorted keys and then over all items that are
+    non-dictionary values (sorted by keys), then over the rest
+    (sorted by keys), providing full dotted paths for every leaf.
     """
+    if manually_sorted_keys is None:
+        manually_sorted_keys = []
+    for key in manually_sorted_keys:
+        if key in dictionary:
+            yield key, dictionary[key]
+
     single_line_keys = [key for key in dictionary.keys() if
-                        not dictionary[key] or
-                        not isinstance(dictionary[key], dict)]
+                        key not in manually_sorted_keys and
+                        (not dictionary[key] or
+                         not isinstance(dictionary[key], dict))]
     for key in sorted(single_line_keys):
         yield key, dictionary[key]
 
-    multi_line_keys = [key for key in dictionary.keys()
-                       if (dictionary[key] and
-                           isinstance(dictionary[key], dict))]
+    multi_line_keys = [key for key in dictionary.keys() if
+                       key not in manually_sorted_keys and
+                       (dictionary[key] and
+                        isinstance(dictionary[key], dict))]
     for key in sorted(multi_line_keys):
         yield key, PATHCHANGE
-        for k, val in iterate_flattened_separately(dictionary[key]):
+        for k, val in iterate_flattened_separately(dictionary[key],
+                                                   manually_sorted_keys):
             yield join_paths(key, k), val
 
 
@@ -251,15 +339,14 @@ def is_subdir(path, directory):
     return path.startswith(directory)
 
 
+# noinspection PyUnusedLocal
 @wrapt.decorator
 def optional_kwargs_decorator(wrapped, instance=None, args=None, kwargs=None):
-    def _decorated(func):
-        return wrapped(func, **kwargs)
-
-    if args:
-        return _decorated(*args)
-    else:
-        return _decorated
+    # here wrapped is itself a decorator
+    if args:  # means it was used as a normal decorator (so just call it)
+        return wrapped(*args, **kwargs)
+    else:  # used with kwargs, so we need to return a decorator
+        return partial(wrapped, **kwargs)
 
 
 def get_inheritors(cls):
@@ -307,3 +394,13 @@ def apply_backspaces_and_linefeeds(text):
                 cursor += 1
         lines.append(''.join(chars))
     return '\n'.join(lines)
+
+
+# Code adapted from here:
+# https://blog.codinghorror.com/sorting-for-humans-natural-sort-order/
+def natural_sort(l):
+    def alphanum_key(key):
+        return [int(c) if c.isdigit() else c.lower()
+                for c in re.split('([0-9]+)', key)]
+
+    return sorted(l, key=alphanum_key)

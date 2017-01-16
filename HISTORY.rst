@@ -1,6 +1,56 @@
 Release History
 ---------------
 
+0.7.0 (2017-01-??)
+++++++++++++++++++
+* Feature: host info now contains information about NVIDIA GPUs (if available)
+* Feature: git integration: sacred now collects info about the git repository
+           of the experiment (if available and if gitpython is installed)
+* Feature: new ``--enforce-clean`` flag that cancels a run if the
+           git repository is dirty
+* Feature: config now supports arbitrary python types by using jsonpickle
+* Feature: added new TinyDbObserver and TinyDbReader
+* Feature: added new SqlObserver
+* Feature: added new FileStorageObserver
+* Feature: added new SlackObserver
+* Feature: added save_config command
+* Feature: added queue flag to just queue a run instead of executing it
+* Feature: added TimeoutInterrupt to signal that a run timed out
+* Feature: experiments can now be run in Jupyter notebook, but will fail with
+           an error by default, which can be deactivated using interactive=True
+* Feature: allow to pass unparsed commandline string to ``ex.run_commandline``.
+* Feature: improved stdout/stderr capturing: it now also collects non-python
+           outputs and logging.
+* Feature: observers now share the id of a run and it is available during
+           runtime as ``run._id``.
+* Feature: new ``--print_config`` flag to always print config first
+* Feature: added sacred.SETTINGS as a place to configure some of the behaviour
+* Feature: ConfigScopes now extract docstrings and line comments and display
+           them when calling ``print_config``
+* API Change: all times are now in UTC
+* API Change: significantly changed the mongoDB layout
+* API Change: MongoObserver and FileStorageObserver now use consecutive
+              integers as _id
+* API Change: the name passed to Experiment is now optional and defaults to the
+              name of the file in which it was instantiated.
+              (The name is still required for interactive mode)
+* API Change: Artifacts can now be named, and are stored by the observers under
+              that name.
+* API Change: Experiment.run_command is deprecated in favor of run, which now
+              also takes a command_name parameter.
+* API Change: Experiment.run now takes an options argument to add
+              commandline-options also from python.
+* API Change: Experiment.get_experiment_info() now returns source-names as
+              relative paths and includes a separate base_dir entry
+* Dependencies: Migrated from six to future, to avoid conflicts with old
+                preinstalled versions of six.
+* Bugfix: fixed a problem when trying  to set the loglevel to DEBUG
+* Bugfix: type conversions from None to some other type are now correctly ignored
+* Bugfix: fixed a problem with stdout capturing breaking tools that access
+          certain attributes of ``sys.stdout`` or ``sys.stderr``.
+* Bugfix: @main, @automain, @command and @capture now support functions with
+           Python3 style annotations.
+
 0.6.10 (2016-08-08)
 +++++++++++++++++++
 * Bugfix: fixed a problem when trying  to set the loglevel to DEBUG

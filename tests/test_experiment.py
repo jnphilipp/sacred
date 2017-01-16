@@ -8,6 +8,7 @@ import pytest
 import sys
 
 from sacred.experiment import Experiment
+from sacred.utils import apply_backspaces_and_linefeeds
 
 
 @pytest.fixture
@@ -163,10 +164,7 @@ def test_using_a_named_config(ex):
     assert ex.run(named_configs=['ncfg']).result == 10
 
 
-def test_captured_out_filter(ex):
-    from sacred.utils import apply_backspaces_and_linefeeds
-    ex.captured_out_filter = apply_backspaces_and_linefeeds
-
+def test_captured_out_filter(ex, capsys):
     @ex.main
     def run_print_mock_progress():
         sys.stdout.write('progress 0')
@@ -176,4 +174,27 @@ def test_captured_out_filter(ex):
             sys.stdout.write(str(i))
             sys.stdout.flush()
 
-    assert ex.run().captured_out == 'progress 9'
+    ex.captured_out_filter = apply_backspaces_and_linefeeds
+    options = {'--loglevel': 'CRITICAL'}  # to disable logging
+    with capsys.disabled():
+        assert ex.run(options=options).captured_out == 'progress 9'
+
+
+def test_adding_option_hooks(ex):
+    @ex.option_hook
+    def hook(options):
+        pass
+
+    @ex.option_hook
+    def hook2(options):
+        pass
+
+    assert hook in ex.option_hooks
+    assert hook2 in ex.option_hooks
+
+
+def test_option_hooks_without_options_arg_raises(ex):
+    with pytest.raises(KeyError):
+        @ex.option_hook
+        def invalid_hook(wrong_arg_name):
+            pass

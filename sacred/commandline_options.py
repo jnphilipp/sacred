@@ -8,6 +8,7 @@ Some further options that add observers to the run are defined alongside those.
 """
 
 from __future__ import division, print_function, unicode_literals
+from sacred.commands import print_config
 from sacred.utils import convert_camel_case_to_snake_case, get_inheritors
 
 
@@ -37,44 +38,55 @@ class CommandLineOption(object):
 
     @classmethod
     def get_flag(cls):
-        """
-        Return the short and the long version of this option.
-
-        The long flag (e.g. 'foo_bar'; used on the command-line like this:
-        --foo_bar[=ARGS]) is derived from the class-name by stripping away any
-        -Option suffix and converting the rest to snake_case.
-
-        The short flag (e.g. 'f'; used on the command-line like this:
-        -f [ARGS]) the short_flag class-member if that is set, or the first
-        letter of the long flag otherwise.
-
-        :return: tuple of short-flag, and long-flag
-        :rtype: (str, str)
-        """
         # Get the flag name from the class name
         flag = cls.__name__
         if flag.endswith("Option"):
             flag = flag[:-6]
-        flag = convert_camel_case_to_snake_case(flag)
+        return '--' + convert_camel_case_to_snake_case(flag)
 
+    @classmethod
+    def get_short_flag(cls):
         if cls.short_flag is None:
-            return flag[:1], flag
+            return '-' + cls.get_flag()[2]
         else:
-            return cls.short_flag, flag
+            return '-' + cls.short_flag
+
+    @classmethod
+    def get_flags(cls):
+        """
+        Return the short and the long version of this option.
+
+        The long flag (e.g. '--foo_bar'; used on the command-line like this:
+        --foo_bar[=ARGS]) is derived from the class-name by stripping away any
+        -Option suffix and converting the rest to snake_case.
+
+        The short flag (e.g. '-f'; used on the command-line like this:
+        -f [ARGS]) the short_flag class-member if that is set, or the first
+        letter of the long flag otherwise.
+
+        Returns
+        -------
+        (str, str)
+            tuple of short-flag, and long-flag
+        """
+        return cls.get_short_flag(), cls.get_flag()
 
     @classmethod
     def apply(cls, args, run):
         """
         Modify the current Run base on this command-line option.
 
-        This function is executed after contstructing the Run object, but
+        This function is executed after constructing the Run object, but
         before actually starting it.
-        :param args: If this command-line option accepts an argument this will
-                     be value of that argument if set or None.
-                     Otherwise it is either True or False.
-        :type args: bool | str
-        :param run: The current run to be modified
-        :type run: sacred.run.Run
+
+        Parameters
+        ----------
+        args : bool | str
+            If this command-line option accepts an argument this will be value
+            of that argument if set or None.
+            Otherwise it is either True or False.
+        run :  sacred.run.Run
+            The current run to be modified
         """
         pass
 
@@ -137,7 +149,7 @@ class CommentOption(CommandLineOption):
     @classmethod
     def apply(cls, args, run):
         """Add a comment to this run."""
-        run.comment = args
+        run.meta_info['comment'] = args
 
 
 class BeatIntervalOption(CommandLineOption):
@@ -161,6 +173,15 @@ class UnobservedOption(CommandLineOption):
         run.unobserved = True
 
 
+class QueueOption(CommandLineOption):
+    """Only queue this run, do not start it."""
+
+    @classmethod
+    def apply(cls, args, run):
+        """Set this run to queue only mode."""
+        run.queue_only = True
+
+
 class ForceOption(CommandLineOption):
     """Disable warnings about suspicious changes for this run."""
 
@@ -168,3 +189,48 @@ class ForceOption(CommandLineOption):
     def apply(cls, args, run):
         """Set this run to not warn about suspicous changes."""
         run.force = True
+
+
+class PriorityOption(CommandLineOption):
+    """Sets the priority for a queued up experiment."""
+
+    short_flag = 'P'
+    arg = 'PRIORITY'
+    arg_description = 'The (numeric) priority for this run.'
+
+    @classmethod
+    def apply(cls, args, run):
+        """Add priority info for this run."""
+        try:
+            priority = float(args)
+        except ValueError:
+            raise ValueError("The PRIORITY argument must be a number! "
+                             "(but was '{}')".format(args))
+        run.meta_info['priority'] = priority
+
+
+class EnforceCleanOption(CommandLineOption):
+    """Fail if any version control repository is dirty."""
+
+    @classmethod
+    def apply(cls, args, run):
+        repos = run.experiment_info['repositories']
+        if not repos:
+            raise RuntimeError('No version control detected. '
+                               'Cannot enforce clean repository.\n'
+                               'Make sure that your sources under VCS and the '
+                               'corresponding python package is installed.')
+        else:
+            for repo, (commit, is_dirty) in repos.items():
+                if is_dirty:
+                    raise RuntimeError('EnforceClean: Uncommited changes in '
+                                       'the "{}" repository.'.format(repo))
+
+
+class PrintConfigOption(CommandLineOption):
+    """Always print the configuration first."""
+
+    @classmethod
+    def apply(cls, args, run):
+        print_config(run)
+        print('-' * 79)

@@ -19,6 +19,7 @@ When run, this example will output the following::
 
 """
 from __future__ import division, print_function, unicode_literals
+
 from sacred import Experiment
 
 ex = Experiment('captured_functions')

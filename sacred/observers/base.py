@@ -10,7 +10,12 @@ __all__ = ('RunObserver',)
 class RunObserver(object):
     """Defines the interface for all run observers."""
 
-    def started_event(self, ex_info, host_info, start_time, config, comment):
+    def queued_event(self, ex_info, command, queue_time, config, meta_info,
+                     _id):
+        pass
+
+    def started_event(self, ex_info, command, host_info, start_time, config,
+                      meta_info, _id):
         pass
 
     def heartbeat_event(self, info, captured_out, beat_time):
@@ -19,7 +24,7 @@ class RunObserver(object):
     def completed_event(self, stop_time, result):
         pass
 
-    def interrupted_event(self, interrupt_time):
+    def interrupted_event(self, interrupt_time, status):
         pass
 
     def failed_event(self, fail_time, fail_trace):
@@ -28,5 +33,5 @@ class RunObserver(object):
     def resource_event(self, filename):
         pass
 
-    def artifact_event(self, filename):
+    def artifact_event(self, name, filename):
         pass

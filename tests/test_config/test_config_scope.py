@@ -14,23 +14,26 @@ from sacred.config.custom_containers import DogmaticDict, DogmaticList
 def conf_scope():
     @ConfigScope
     def cfg():
+        # description for a
         a = 1
-        b = 2.0
-        c = True
-        d = 'string'
-        e = [1, 2, 3]
+        # description for b and c
+        b, c = 2.0, True
+        # d and dd are both strings
+        d = dd = 'string'
+        e = [1, 2, 3]  # inline description for e
         f = {'a': 'b', 'c': 'd'}
         composit1 = a + b
+        # pylint: this comment is filtered out
         composit2 = f['c'] + "ada"
 
-        ignored1 = lambda: 23
+        func1 = lambda: 23
 
-        deriv = ignored1()
+        deriv = func1()
 
-        def ignored2():
-            pass
+        def func2(a):
+            return 'Nothing to report' + a
 
-        ignored3 = int
+        some_type = int
 
     cfg()
     return cfg
@@ -43,17 +46,22 @@ def test_result_of_config_scope_is_dict(conf_scope):
 
 def test_result_of_config_scope_contains_keys(conf_scope):
     cfg = conf_scope()
-    assert set(cfg.keys()) == {'a', 'b', 'c', 'd', 'e', 'f',
-                               'composit1', 'composit2', 'deriv'}
+    assert set(cfg.keys()) == {'a', 'b', 'c', 'd', 'dd', 'e', 'f',
+                               'composit1', 'composit2', 'deriv', 'func1',
+                               'func2', 'some_type'}
 
     assert cfg['a'] == 1
     assert cfg['b'] == 2.0
     assert cfg['c']
     assert cfg['d'] == 'string'
+    assert cfg['dd'] == 'string'
     assert cfg['e'] == [1, 2, 3]
     assert cfg['f'] == {'a': 'b', 'c': 'd'}
     assert cfg['composit1'] == 3.0
     assert cfg['composit2'] == 'dada'
+    assert cfg['func1']() == 23
+    assert cfg['func2'](', sir!') == 'Nothing to report, sir!'
+    assert cfg['some_type'] == int
     assert cfg['deriv'] == 23
 
 
@@ -87,6 +95,19 @@ def test_typechange(conf_scope):
 def test_nested_typechange(conf_scope):
     cfg = conf_scope({'f': {'a': 10}})
     assert cfg.typechanged == {'f.a': (type('a'), int)}
+
+
+def test_config_docs(conf_scope):
+    cfg = conf_scope()
+    assert cfg.docs == {
+        'a': 'description for a',
+        'b': 'description for b and c',
+        'c': 'description for b and c',
+        'd': 'd and dd are both strings',
+        'dd': 'd and dd are both strings',
+        'e': 'inline description for e',
+        'seed': 'the random seed for this experiment'
+    }
 
 
 def is_dogmatic(a):

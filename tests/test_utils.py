@@ -1,14 +1,18 @@
 #!/usr/bin/env python
 # coding=utf-8
 from __future__ import division, print_function, unicode_literals
+import os
+import sys
+import tempfile
 
 import pytest
+
 from sacred.utils import (PATHCHANGE, convert_to_nested_dict,
                           get_by_dotted_path, is_prefix, is_subdir,
                           iter_path_splits, iter_prefixes, iterate_flattened,
                           iterate_flattened_separately, join_paths,
                           recursive_update, set_by_dotted_path, get_inheritors,
-                          convert_camel_case_to_snake_case,
+                          convert_camel_case_to_snake_case, tee_output,
                           apply_backspaces_and_linefeeds)
 
 
@@ -21,13 +25,13 @@ def test_recursive_update():
 
 def test_iterate_flattened_separately():
     d = {'a1': 1,
-         'b2': {'foo': 'bar'},
+         'b2': {'bar': 'foo', 'foo': 'bar'},
          'c1': 'f',
          'd1': [1, 2, 3],
          'e2': {}}
-    res = list(iterate_flattened_separately(d))
+    res = list(iterate_flattened_separately(d, ['foo', 'bar']))
     assert res == [('a1', 1), ('c1', 'f'), ('d1', [1, 2, 3]), ('e2', {}),
-                   ('b2', PATHCHANGE), ('b2.foo', 'bar')]
+                   ('b2', PATHCHANGE), ('b2.foo', 'bar'), ('b2.bar', 'foo')]
 
 
 def test_iterate_flattened():
@@ -160,8 +164,43 @@ def test_convert_camel_case_to_snake_case(name, expected):
     ('abc\rdef', 'def'),
     ('abc\r', 'abc'),
     ('abc\rd', 'dbc'),
+    ('abc\r\nd', 'abc\nd'),
     ('abc\ndef\rg', 'abc\ngef'),
     ('abc\ndef\r\rg', 'abc\ngef')
 ])
 def test_apply_backspaces_and_linefeeds(text, expected):
     assert apply_backspaces_and_linefeeds(text) == expected
+
+
+def test_tee_output(capsys):
+    from sacred.optional import libc
+
+    expected_lines = {
+        "captured stdout\n",
+        "captured stderr\n",
+        "and this is from echo\n"}
+    if not sys.platform.startswith('win'):
+        # FIXME: this line randomly doesn't show on windows (skip for now)
+        expected_lines.add("stdout from C\n")
+
+    with capsys.disabled():
+        try:
+            print('before (stdout)')
+            print('before (stderr)')
+            with tempfile.NamedTemporaryFile(delete=False) as f, tee_output(f):
+                print("captured stdout")
+                print("captured stderr")
+                if not sys.platform.startswith('win'):
+                    libc.puts(b'stdout from C')
+                    libc.fflush(None)
+                os.system('echo and this is from echo')
+
+            print('after (stdout)')
+            print('after (stderr)')
+
+            with open(f.name, 'r') as f:
+                lines = set(f.readlines())
+                assert lines == expected_lines
+        finally:
+            print('deleting', f.name)
+            os.remove(f.name)

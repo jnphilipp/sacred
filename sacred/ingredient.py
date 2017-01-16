@@ -6,18 +6,22 @@ import inspect
 import os.path
 
 from collections import OrderedDict
-from six import string_types
 
 from sacred.config import (ConfigDict, ConfigScope, create_captured_function,
                            load_config_file)
 from sacred.dependencies import (PEP440_VERSION_PATTERN, PackageDependency,
                                  Source, gather_sources_and_dependencies)
-from sacred.initialize import create_run
+from sacred.optional import basestring
 from sacred.utils import CircularDependencyError, optional_kwargs_decorator
 
 __sacred__ = True  # marks files that should be filtered from stack traces
 
 __all__ = ('Ingredient',)
+
+
+def collect_repositories(sources):
+    return [{'url': s.repo, 'commit': s.commit, 'dirty': s.is_dirty}
+            for s in sources if s.repo]
 
 
 class Ingredient(object):
@@ -46,6 +50,8 @@ class Ingredient(object):
         self.commands = OrderedDict()
         # capture some context information
         _caller_globals = _caller_globals or inspect.stack()[1][0].f_globals
+        mainfile_name = _caller_globals.get('__file__', '.')
+        self.base_dir = os.path.dirname(os.path.abspath(mainfile_name))
         self.doc = _caller_globals.get('__doc__', "")
         self.sources, self.dependencies = \
             gather_sources_and_dependencies(_caller_globals, interactive)
@@ -201,7 +207,7 @@ class Ingredient(object):
             return ConfigDict(kw_conf)
         elif isinstance(cfg_or_file, dict):
             return ConfigDict(cfg_or_file)
-        elif isinstance(cfg_or_file, string_types):
+        elif isinstance(cfg_or_file, basestring):
             if not os.path.exists(cfg_or_file):
                 raise IOError('File not found {}'.format(cfg_or_file))
             abspath = os.path.abspath(cfg_or_file)
@@ -271,7 +277,6 @@ class Ingredient(object):
           * *name*: the name
           * *sources*: a list of sources (filename, md5)
           * *dependencies*: a list of package dependencies (name, version)
-          * *doc*: the docstring
 
         :return: experiment information
         :rtype: dict
@@ -287,9 +292,11 @@ class Ingredient(object):
 
         return dict(
             name=self.path,
-            sources=[s.to_tuple() for s in sorted(sources)],
-            dependencies=[d.to_tuple() for d in sorted(dependencies)],
-            doc=self.doc)
+            base_dir=self.base_dir,
+            sources=[s.to_json(self.base_dir) for s in sorted(sources)],
+            dependencies=[d.to_json() for d in sorted(dependencies)],
+            repositories=collect_repositories(sources)
+        )
 
     def traverse_ingredients(self):
         if self._is_traversing:
@@ -301,11 +308,3 @@ class Ingredient(object):
             for ingred, depth in ingredient.traverse_ingredients():
                 yield ingred, depth + 1
         self._is_traversing = False
-
-    # ======================== Private Helpers ================================
-
-    def _create_run_for_command(self, command_name, config_updates=None,
-                                named_configs=(), force=False):
-        run = create_run(self, command_name, config_updates,
-                         named_configs=named_configs, force=force)
-        return run

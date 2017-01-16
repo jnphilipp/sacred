@@ -9,20 +9,19 @@ import re
 import sys
 
 import pkg_resources
-import six
 import sacred.optional as opt
 from sacred.utils import is_subdir, iter_prefixes
 
 __sacred__ = True  # marks files that should be filtered from stack traces
 
 MB = 1048576
-MODULE_BLACKLIST = {None, '__future__', 'hashlib', 'os', 're'} | \
+MODULE_BLACKLIST = {None, '__future__', '__main__', 'hashlib', 'os', 're'} | \
     set(sys.builtin_module_names)
 module = type(sys)
 PEP440_VERSION_PATTERN = re.compile(r"""
 ^
 (\d+!)?              # epoch
-(\d[\.\d]*(?<= \d))  # release
+(\d[.\d]*(?<= \d))   # release
 ((?:[abc]|rc)\d+)?   # pre-release
 (?:(\.post\d+))?     # post-release
 (?:(\.dev\d+))?      # development release
@@ -50,11 +49,33 @@ def get_digest(filename):
         return h.hexdigest()
 
 
+def get_commit_if_possible(filename):
+    # git
+    if opt.has_gitpython:
+        from git import Repo, InvalidGitRepositoryError
+        try:
+            directory = os.path.dirname(filename)
+            repo = Repo(directory, search_parent_directories=True)
+            try:
+                path = repo.remote().url
+            except ValueError:
+                path = 'git:/' + repo.working_dir
+            is_dirty = repo.is_dirty()
+            commit = repo.head.commit.hexsha
+            return path, commit, is_dirty
+        except InvalidGitRepositoryError:
+            pass
+    return None, None, None
+
+
 @functools.total_ordering
 class Source(object):
-    def __init__(self, filename, digest):
+    def __init__(self, filename, digest, repo, commit, isdirty):
         self.filename = filename
         self.digest = digest
+        self.repo = repo
+        self.commit = commit
+        self.is_dirty = isdirty
 
     @staticmethod
     def create(filename):
@@ -62,12 +83,15 @@ class Source(object):
             raise ValueError('invalid filename or file not found "{}"'
                              .format(filename))
 
-        mainfile = get_py_file_if_possible(os.path.abspath(filename))
+        main_file = get_py_file_if_possible(os.path.abspath(filename))
+        repo, commit, is_dirty = get_commit_if_possible(main_file)
+        return Source(main_file, get_digest(main_file), repo, commit, is_dirty)
 
-        return Source(mainfile, get_digest(mainfile))
-
-    def to_tuple(self):
-        return self.filename, self.digest
+    def to_json(self, base_dir=None):
+        if base_dir:
+            return os.path.relpath(self.filename, base_dir), self.digest
+        else:
+            return self.filename, self.digest
 
     def __hash__(self):
         return hash(self.filename)
@@ -99,8 +123,8 @@ class PackageDependency(object):
         except pkg_resources.DistributionNotFound:
             self.version = '<unknown>'
 
-    def to_tuple(self):
-        return self.name, self.version
+    def to_json(self):
+        return '{}=={}'.format(self.name, self.version)
 
     def __hash__(self):
         return hash(self.name)
@@ -123,7 +147,7 @@ class PackageDependency(object):
         for vattr in possible_version_attributes:
             if hasattr(mod, vattr):
                 version = getattr(mod, vattr)
-                if isinstance(version, six.string_types) and \
+                if isinstance(version, opt.basestring) and \
                         PEP440_VERSION_PATTERN.match(version):
                     return version
                 if isinstance(version, tuple):

@@ -8,8 +8,8 @@ Intended Audience :: Science/Research
 Natural Language :: English
 Operating System :: OS Independent
 Programming Language :: Python :: 2.7
-Programming Language :: Python :: 3.3
 Programming Language :: Python :: 3.4
+Programming Language :: Python :: 3.5
 Topic :: Utilities
 Topic :: Scientific/Engineering
 Topic :: Scientific/Engineering :: Artificial Intelligence
@@ -39,9 +39,14 @@ setup(
     packages=['sacred', 'sacred.observers', 'sacred.config'],
     scripts=[],
     install_requires=[
-        'docopt', 'six', 'wrapt'
+        'docopt>=0.3, <1.0',
+        'jsonpickle>=0.7.2, <1.0',
+        'munch>=2.0.2, <3.0',
+        'wrapt>=1.0, <2.0'
     ],
-    tests_require=['mock', 'mongomock', 'pytest'],
+    tests_require=[
+        'mock>=0.8, <3.0',
+        'pytest>=3.0.1, <4.0'],
 
     classifiers=list(filter(None, classifiers.split('\n'))),
     description='Facilitates automated and reproducible experimental research',

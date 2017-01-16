@@ -125,9 +125,34 @@ Supported formats are the same as with :ref:`config_files`.
 If there should ever be a name-collision between a named config and a config
 file the latter takes precedence.
 
+Commands
+========
+
+Apart from running the main function (the default command), the command-line
+interface also supports other (built-in or custom) commands.
+The name of the command has to be first on the commandline::
+
+    >>> ./my_demo.py COMMAND_NAME with seed=123
+
+If the COMMAND_NAME is ommitted it defaults to the main function, but the name
+of that function can also explicitly used as the name of the command.
+So for this experiment
+
+.. code-block:: python
+
+    @ex.automain
+    def my_main():
+        return 42
+
+the following two lines are equivalent::
+
+    >>> ./my_demo.py with seed=123
+    >>> ./my_demo.py my_main with seed=123
+
+.. _print_config:
 
 Print Config
-============
+------------
 
 To inspect the configuration of your experiment and see how changes from the
 command-line affect it you can use the ``print_config`` command. The full
@@ -177,8 +202,66 @@ help you find typos and update mistakes::
         foo = True             # red
     INFO - hello_config - Completed after 0:00:00
 
+
+.. _print_dependencies:
+
+Print Dependencies
+------------------
+
+The ``print_dependencies`` command shows the package dependencies, source files,
+and (optionally) the state of version control for the experiment. For example::
+
+    >> ./03_hello_config_scope.py print_dependencies
+    INFO - hello_cs - Running command 'print_dependencies'
+    INFO - hello_cs - Started
+    Dependencies:
+      numpy                == 1.11.0
+      sacred               == 0.7.0
+
+    Sources:
+      03_hello_config_scope.py                     53cee32c9dc77870f7b39622434aff85
+
+    Version Control:
+    M git@github.com:IDSIA/sacred.git              bcdde712957570606ec5087b1748c60a89bb89e0
+
+    INFO - hello_cs - Completed after 0:00:00
+
+Where the *Sources* section lists all discovered (or added) source files and their
+md5 hash.
+The *Version Control* section lists all discovered VCS repositories
+(ATM only git is supported), the current commit hash.
+The M at the beginning of the git line signals that the repository is currently
+dirty, i.e. has uncommitted changes.
+
+
+.. _save_config:
+
+Save Configuration
+------------------
+
+Use the ``save_config`` command for saving the current/updated configuration
+into a file::
+
+    ./03_hello_config_scope.py save_config with recipient=Bob
+
+This will store a file called ``config.json`` with the following content::
+
+    {
+      "message": "Hello Bob!",
+      "recipient": "Bob",
+      "seed": 151625947
+    }
+
+The filename can be configured by setting ``config_filename`` like this::
+
+    ./03_hello_config_scope.py save_config with recipient=Bob config_filename=mine.yaml
+
+The format for exporting the config is inferred from the filename and can be
+any format supported for :ref:`config files <config_files>`.
+
+
 Custom Commands
-===============
+---------------
 If you just run an experiment file it will execute the default command, that
 is the method you decorated with ``@ex.main`` or ``@ex.automain``. But you
 can also add other commands to the experiment by using ``@ex.command``:
@@ -252,7 +335,8 @@ the decorator:
 Flags
 =====
 
-**Help**
+Help
+----
 
 +------------+-----------------------------+
 | ``-h``     |  print usage                |
@@ -263,7 +347,10 @@ Flags
 This prints a help/usage message for your experiment.
 It is equivalent to typing just ``help``.
 
-**Comment**
+.. _comment_flag:
+
+Comment
+-------
 
 +-----------------------+-----------------------------+
 | ``-c COMMENT``        |  add a comment to this run  |
@@ -273,7 +360,8 @@ It is equivalent to typing just ``help``.
 
 The ``COMMENT`` can be any text and will be stored with the run.
 
-**Logging Level**
+Logging Level
+-------------
 
 +----------------------+-----------------------------+
 | ``-l LEVEL``         |  control the logging level  |
@@ -301,7 +389,8 @@ With this flag you can adjust the logging level.
 
 See :ref:`log_levels` for more details.
 
-**MongoDB Observer**
+MongoDB Observer
+----------------
 
 +-------------------+--------------------------+
 | ``-m DB``         |  add a MongoDB observer  |
@@ -315,7 +404,71 @@ be of the form ``db_name`` or ``[host:port:]db_name``.
 
 See :ref:`mongo_observer` for more details.
 
-**Debug Mode**
+
+FileStorage Observer
+--------------------
+
++----------------------------+------------------------------+
+| ``-F BASEDIR``             |  add a file storage observer |
++----------------------------+                              |
+| ``--file_storage=BASEDIR`` |                              |
++----------------------------+------------------------------+
+
+
+This flag can be used to add a file-storage observer to your experiment.
+``BASEDIR`` specifies the directory the observer will use to store its files.
+
+See :ref:`file_observer` for more details.
+
+
+TinyDB Observer
+---------------
+
++-----------------------+------------------------------+
+| ``-t BASEDIR``        |  add a TinyDB observer       |
++-----------------------+                              |
+| ``--tiny_db=BASEDIR`` |                              |
++-----------------------+------------------------------+
+
+
+This flag can be used to add a TinyDB observer to your experiment.
+``BASEDIR`` specifies the directory the observer will use to store its files.
+
+See :ref:`tinydb_observer` for more details.
+
+.. note::
+    For this flag to work you need to have the
+    `tinydb <http://tinydb.readthedocs.io>`_,
+    `tinydb-serialization <https://github.com/msiemens/tinydb-serialization>`_,
+    and `hashfs <https://github.com/dgilland/hashfs>`_ packages installed.
+
+
+SQL Observer
+------------
+
++------------------+--------------------------+
+| ``-s DB_URL``    |  add a SQL observer      |
++------------------+                          |
+| ``--sql=DB_URL`` |                          |
++------------------+--------------------------+
+
+
+This flag can be used to add a SQL observer to your experiment.
+``DB_URL`` must be parseable by the `sqlalchemy <http://www.sqlalchemy.org/>`_
+package, which is typically means being of the form
+``dialect://username:password@host:port/database`` (see their
+`documentation <http://docs.sqlalchemy.org/en/latest/core/engines.html#database-urls>`_
+for more detail).
+
+.. note::
+    For this flag to work you need to have the
+    `sqlalchemy <http://www.sqlalchemy.org/>`_ package installed.
+
+See :ref:`mongo_observer` for more details.
+
+
+Debug Mode
+----------
 
 +-------------------+-------------------------------+
 | ``-d``            |  don't filter the stacktrace  |
@@ -328,7 +481,8 @@ this. It is mainly used for debugging experiments using a debugger
 (see :ref:`debugging`).
 
 
-**PDB Debugging**
+PDB Debugging
+-------------
 
 +-------------------+----------------------------------------------------+
 | ``-D``            |  Enter post-mortem debugging with pdb on failure.  |
@@ -340,7 +494,8 @@ If this flag is set and an exception occurs, sacred automatically starts a
 ``pdb`` post-mortem debugger to investigate the error and interact with the
 stack (see :ref:`debugging`).
 
-**Beat Interval**
+Beat Interval
+-------------
 
 +-----------------------------------------+-----------------------------------------------+
 | ``-b BEAT_INTERVAL``                    |  set the interval between heartbeat events    |
@@ -354,7 +509,8 @@ This flag can be used to change the interval from 10 sec (default) to
 ``BEAT_INTERVAL`` sec.
 
 
-**Unobserved**
+Unobserved
+----------
 
 +------------------+--------------------------------------+
 | ``-u``           |  Ignore all observers for this run.  |
@@ -365,6 +521,71 @@ This flag can be used to change the interval from 10 sec (default) to
 If this flag is set, sacred will remove all observers from the current run and
 also silence the warning for having no observers. This is useful for some quick
 tests or debugging runs.
+
+
+.. _cmdline_queue:
+
+Queue
+-----
+
++---------------+-----------------------------------------+
+| ``-q``        |  Only queue this run, do not start it.  |
++---------------+                                         |
+| ``--queue``   |                                         |
++---------------+-----------------------------------------+
+
+Instead of running the experiment, this will only create an entry in the
+database (or where the observers put it) with the status ``QUEUED``.
+This entry will contain all the information about the experiment and the
+configuration. But the experiment will not be run. This can be useful to have
+some distributed workers fetch and start the queued up runs.
+
+.. _cmdline_priority:
+
+Priority
+--------
+
++---------------+-----------------------------------------+
+| ``-p``        |  Only queue this run, do not start it.  |
++---------------+                                         |
+| ``--queue``   |                                         |
++---------------+-----------------------------------------+
+
+
+
+.. _cmdline_enforce_clean:
+
+Enforce Clean
+-------------
++---------------------+----------------------------------------------------+
+| ``-e``              |  Fail if any version control repository is dirty.  |
++---------------------+                                                    |
+| ``--enforce_clean`` |                                                    |
++---------------------+----------------------------------------------------+
+
+This flag can be used to enforce that experiments are only being run on a clean
+repository, i.e. with no uncommitted changes.
+
+.. note::
+    For this flag to work you need to have the
+    `GitPython <https://github.com/gitpython-developers/GitPython>`_
+    package installed.
+
+
+.. _cmdline_print_config:
+
+Print Config
+------------
++-------------------------+---------------------------------------------------+
+| ``-P PRIORITY``         |  Always print the config first.                   |
++-------------------------+                                                   |
+| ``--priority PRIORITY`` |                                                   |
++-------------------------+---------------------------------------------------+
+
+If this flag is set, sacred will always print the current configuration
+including modifications (like the :ref:`print_config` command) before running
+the main method.
+
 
 Custom Flags
 ============

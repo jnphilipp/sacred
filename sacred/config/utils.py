@@ -2,35 +2,74 @@
 # coding=utf-8
 from __future__ import division, print_function, unicode_literals
 
-import json
+import jsonpickle.tags
 
+from sacred import SETTINGS
 import sacred.optional as opt
-import six
 from sacred.config.custom_containers import DogmaticDict, DogmaticList
 from sacred.utils import PYTHON_IDENTIFIER
+from sacred.optional import basestring
 
 
 def assert_is_valid_key(key):
-    if not isinstance(key, six.string_types):
+    """
+    Raise KeyError if a given config key violates any requirements.
+
+    The requirements are the following and can be individually deactivated
+    in ``sacred.SETTINGS.CONFIG_KEYS``:
+      * ENFORCE_MONGO_COMPATIBLE (default: True):
+        make sure the keys don't contain a '.' or start with a '$'
+      * ENFORCE_JSONPICKLE_COMPATIBLE (default: True):
+        make sure the keys do not contain any reserved jsonpickle tags
+        This is very important. Only deactivate if you know what you are doing.
+      * ENFORCE_STRING (default: False):
+        make sure all keys are string.
+      * ENFORCE_VALID_PYTHON_IDENTIFIER (default: False):
+        make sure all keys are valid python identifiers.
+
+    Parameters
+    ----------
+    key:
+      The key that should be checked
+
+    Raises
+    ------
+    KeyError:
+      if the key violates any requirements
+    """
+    if SETTINGS.CONFIG.ENFORCE_KEYS_MONGO_COMPATIBLE and (
+            isinstance(key, basestring) and (key.find('.') > -1 or
+                                             key.startswith('$'))):
+        raise KeyError('Invalid key "{}". Config-keys cannot '
+                       'contain "." or start with "$"'.format(key))
+
+    if SETTINGS.CONFIG.ENFORCE_KEYS_JSONPICKLE_COMPATIBLE and (
+            key in jsonpickle.tags.RESERVED or key.startswith('json://')):
+        raise KeyError('Invalid key "{}". Config-keys cannot be one of the'
+                       'reserved jsonpickle tags: {}'
+                       .format(key, jsonpickle.tags.RESERVED))
+
+    if SETTINGS.CONFIG.ENFORCE_STRING_KEYS and (
+            not isinstance(key, basestring)):
         raise KeyError('Invalid key "{}". Config-keys have to be strings, '
                        'but was {}'.format(key, type(key)))
-    elif key.find('.') > -1 or key.find('$') > -1:
-        raise KeyError('Invalid key "{}". Config-keys cannot '
-                       'contain "." or "$"'.format(key))
-    elif not PYTHON_IDENTIFIER.match(key):
-        raise KeyError('Key "{}" is not a valid python identifier'.format(key))
+
+    if SETTINGS.CONFIG.ENFORCE_VALID_PYTHON_IDENTIFIER_KEYS and (
+            isinstance(key, basestring) and not PYTHON_IDENTIFIER.match(key)):
+        raise KeyError('Key "{}" is not a valid python identifier'
+                       .format(key))
+
+    if SETTINGS.CONFIG.ENFORCE_KEYS_NO_EQUALS and (
+            isinstance(key, basestring) and '=' in key):
+        raise KeyError('Invalid key "{}". Config keys may not contain an'
+                       'equals sign ("=").'.format('='))
 
 
 def normalize_numpy(obj):
-    if isinstance(obj, opt.np.generic):
+    if opt.has_numpy and isinstance(obj, opt.np.generic):
         try:
             return opt.np.asscalar(obj)
         except ValueError:
-            pass
-    elif isinstance(obj, opt.np.ndarray):
-        try:
-            return obj.tolist()
-        except (AttributeError, ValueError):
             pass
     return obj
 
@@ -44,14 +83,7 @@ def normalize_or_die(obj):
         return res
     elif isinstance(obj, (list, tuple)):
         return list([normalize_or_die(value) for value in obj])
-    elif opt.has_numpy:
-        obj = normalize_numpy(obj)
-    try:
-        json.dumps(obj)
-        return obj
-    except TypeError:
-        raise ValueError("Invalid value '{}'. All values have to be"
-                         "JSON-serializeable".format(obj))
+    return normalize_numpy(obj)
 
 
 def recursive_fill_in(config, preset):
