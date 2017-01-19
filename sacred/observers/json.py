@@ -9,23 +9,26 @@ from sacred.observers.base import RunObserver
 
 
 class JSONObserver(RunObserver):
-    def __init__(self, base_dir, number_format='%03d', indent=4):
+    def __init__(self, base_dir, experiment=None, number_format='%03d', indent=4):
         self.base_dir = base_dir
         self.number_format = number_format
         self.indent = indent
+        self.nb_experiment = int(experiment) if experiment is not None else -1
         self.experiment_dir = None
-        self.nb_experiment = -1
         self.run_entry = None
+
 
     def create_dirs(self, name, _id):
         experiments_dir = os.path.join(self.base_dir, name)
         if not os.path.exists(experiments_dir):
             os.makedirs(experiments_dir)
 
-        if _id is None:
+        if _id is None and self.nb_experiment is -1:
             self.nb_experiment = sum(1 for e in os.scandir(experiments_dir) if e.is_dir())
             self.experiment_dir = os.path.join(self.base_dir, name, self.number_format % self.nb_experiment)
             os.makedirs(self.experiment_dir)
+        elif self.nb_experiment is not -1 and self.experiment_dir is None:
+            self.experiment_dir = os.path.join(self.base_dir, name, self.number_format % self.nb_experiment)
 
 
     def queued_event(self, ex_info, command, queue_time, config, meta_info, _id):
@@ -86,7 +89,12 @@ class JSONObserver(RunObserver):
                         if k not in fields:
                             fields.append(k)
                     for row in reader:
-                        experiments.append(row)
+                        if row['experiment'] == self.number_format % self.nb_experiment:
+                            for k in row.keys():
+                                if k is not 'experiment' and k not in result:
+                                    result[k] = row[k]
+                        else:
+                            experiments.append(row)
 
             with open(experiments_path, 'w', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fields, dialect='unix')
@@ -120,7 +128,7 @@ class JSONObserver(RunObserver):
 
 
     def save(self):
-        with open(os.path.join(self.experiment_dir, 'sacred.json'), 'w', encoding='utf8') as f:
+        with open(os.path.join(self.experiment_dir, 'sacred-%s.json' % self.run_entry['command']), 'w', encoding='utf8') as f:
             f.write(json.dumps(self.run_entry, indent=4, default=json_util.default))
             f.write('\n')
 
