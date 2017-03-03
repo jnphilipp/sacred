@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import traceback as tb
+from threading import Timer
 from functools import partial
 from contextlib import contextmanager
 
@@ -127,26 +128,27 @@ def tee_output(target):
     final_output = []
 
     try:
-        try:
-            tee_stdout = subprocess.Popen(
-                ['tee', '-a', '/dev/stderr'],
-                stdin=subprocess.PIPE, stderr=target_fd, stdout=1)
-            tee_stderr = subprocess.Popen(
-                ['tee', '-a', '/dev/stderr'],
-                stdin=subprocess.PIPE, stderr=target_fd, stdout=2)
-        except (FileNotFoundError, OSError):
-            tee_stdout = subprocess.Popen(
-                [sys.executable, "-m", "sacred.pytee"],
-                stdin=subprocess.PIPE, stderr=target_fd)
-            tee_stderr = subprocess.Popen(
-                [sys.executable, "-m", "sacred.pytee"],
-                stdin=subprocess.PIPE, stdout=target_fd)
+        tee_stdout = subprocess.Popen(
+            ['tee', '-a', '/dev/stderr'],
+            stdin=subprocess.PIPE, stderr=target_fd, stdout=1)
+        tee_stderr = subprocess.Popen(
+            ['tee', '-a', '/dev/stderr'],
+            stdin=subprocess.PIPE, stderr=target_fd, stdout=2)
+    except (FileNotFoundError, OSError):
+        tee_stdout = subprocess.Popen(
+            [sys.executable, "-m", "sacred.pytee"],
+            stdin=subprocess.PIPE, stderr=target_fd)
+        tee_stderr = subprocess.Popen(
+            [sys.executable, "-m", "sacred.pytee"],
+            stdin=subprocess.PIPE, stdout=target_fd)
 
-        flush()
-        os.dup2(tee_stdout.stdin.fileno(), original_stdout_fd)
-        os.dup2(tee_stderr.stdin.fileno(), original_stderr_fd)
+    flush()
+    os.dup2(tee_stdout.stdin.fileno(), original_stdout_fd)
+    os.dup2(tee_stderr.stdin.fileno(), original_stderr_fd)
 
+    try:
         yield final_output  # let the caller do their printing
+    finally:
         flush()
 
         # then redirect stdout back to the saved fd
@@ -157,9 +159,20 @@ def tee_output(target):
         os.dup2(saved_stdout_fd, original_stdout_fd)
         os.dup2(saved_stderr_fd, original_stderr_fd)
 
-        tee_stdout.wait()
-        tee_stderr.wait()
-    finally:
+        # wait for completion of the tee processes with timeout
+        # implemented using a timer because timeout support is py3 only
+        def kill_tees():
+            tee_stdout.kill()
+            tee_stderr.kill()
+
+        tee_timer = Timer(1, kill_tees)
+        try:
+            tee_timer.start()
+            tee_stdout.wait()
+            tee_stderr.wait()
+        finally:
+            tee_timer.cancel()
+
         os.close(saved_stdout_fd)
         os.close(saved_stderr_fd)
         target.flush()
