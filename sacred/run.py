@@ -8,11 +8,9 @@ import sys
 import threading
 import traceback as tb
 
-from tempfile import NamedTemporaryFile
-
 from sacred.randomness import set_global_seed
-from sacred.utils import (tee_output, ObserverError, SacredInterrupt,
-                          join_paths, flush)
+from sacred.utils import ObserverError, SacredInterrupt, join_paths
+from sacred.stdout_capturing import get_stdcapturer, flush
 
 
 __sacred__ = True  # marks files that should be filtered from stack traces
@@ -103,6 +101,9 @@ class Run(object):
         self.fail_trace = None
         """A stacktrace, in case the run failed"""
 
+        self.capture_mode = None
+        """Determines the way the stdout/stderr are captured"""
+
         self._heartbeat = None
         self._failed_observers = []
         self._output_file = None
@@ -169,10 +170,10 @@ class Run(object):
             name of the file to be stored as artifact
         name : str, optional
             optionally set the name of the artifact.
-            Defaults to the relative file-path.
+            Defaults to the filename.
         """
         filename = os.path.abspath(filename)
-        name = os.path.relpath(filename) if name is None else name
+        name = os.path.basename(filename) if name is None else name
         self._emit_artifact_added(name, filename)
 
     def __call__(self, *args):
@@ -199,12 +200,19 @@ class Run(object):
         self.warn_if_unobserved()
         set_global_seed(self.config['seed'])
 
+        if self.capture_mode is None and not self.observers:
+            capture_mode = "no"
+        else:
+            capture_mode = self.capture_mode
+        capture_mode, capture_stdout = get_stdcapturer(capture_mode)
+        self.run_logger.debug('Using capture mode "%s"', capture_mode)
+
         if self.queue_only:
             self._emit_queued()
             return
         try:
             try:
-                with NamedTemporaryFile() as f, tee_output(f) as final_out:
+                with capture_stdout() as (f, final_out):
                     self._output_file = f
                     self._emit_started()
                     self._start_heartbeat()
@@ -243,7 +251,9 @@ class Run(object):
         flush()
         self._output_file.flush()
         self._output_file.seek(0)
-        text = self._output_file.read().decode()
+        text = self._output_file.read()
+        if isinstance(text, bytes):
+            text = text.decode()
         if self.captured_out_filter is not None:
             text = self.captured_out_filter(text)
         self.captured_out = text
@@ -321,7 +331,8 @@ class Run(object):
             self._safe_call(observer, 'heartbeat_event',
                             info=self.info,
                             captured_out=self.captured_out,
-                            beat_time=beat_time)
+                            beat_time=beat_time,
+                            result=self.result)
 
     def _stop_time(self):
         self.stop_time = datetime.datetime.utcnow()

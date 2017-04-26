@@ -1,7 +1,7 @@
 Release History
 ---------------
 
-0.7.0 (2017-01-??)
+0.7.0 (2017-??-??)
 ++++++++++++++++++
 * Feature: host info now contains information about NVIDIA GPUs (if available)
 * Feature: git integration: sacred now collects info about the git repository
@@ -29,6 +29,8 @@ Release History
            them when calling ``print_config``
 * Feature: observers are now run in order of priority (settable)
 * Feature: new ``--name=NAME`` option to set the name of experiment for this run
+* Feature: the heartbeat event now stores an intermediate result (if set).
+* Feature: ENVIRONMENT variables can be captured as part of host info.
 * API Change: all times are now in UTC
 * API Change: significantly changed the mongoDB layout
 * API Change: MongoObserver and FileStorageObserver now use consecutive
@@ -52,6 +54,7 @@ Release History
           certain attributes of ``sys.stdout`` or ``sys.stderr``.
 * Bugfix: @main, @automain, @command and @capture now support functions with
            Python3 style annotations.
+* Bugfix: fixe a problem with config-docs from ingredients not being propagated
 
 0.6.10 (2016-08-08)
 +++++++++++++++++++
