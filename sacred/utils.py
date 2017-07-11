@@ -3,8 +3,10 @@
 from __future__ import division, print_function, unicode_literals
 
 import collections
+import inspect
 import logging
 import os.path
+import pkgutil
 import re
 import sys
 import traceback as tb
@@ -15,6 +17,17 @@ import wrapt
 
 __sacred__ = True  # marks files that should be filtered from stack traces
 
+__all__ = ["NO_LOGGER", "PYTHON_IDENTIFIER", "CircularDependencyError",
+           "ObserverError", "SacredInterrupt", "TimeoutInterrupt",
+           "create_basic_stream_logger", "recursive_update",
+           "iterate_flattened", "iterate_flattened_separately",
+           "set_by_dotted_path", "get_by_dotted_path", "iter_path_splits",
+           "iter_prefixes", "join_paths", "is_prefix",
+           "convert_to_nested_dict", "convert_camel_case_to_snake_case",
+           "print_filtered_stacktrace", "is_subdir",
+           "optional_kwargs_decorator", "get_inheritors",
+           "apply_backspaces_and_linefeeds", "StringIO", "FileNotFoundError"]
+
 # A PY2 compatible FileNotFoundError
 if sys.version_info[0] == 2:
     import errno
@@ -22,9 +35,11 @@ if sys.version_info[0] == 2:
     class FileNotFoundError(IOError):
         def __init__(self, msg):
             super(FileNotFoundError, self).__init__(errno.ENOENT, msg)
+    from StringIO import StringIO
 else:
     # Reassign so that we can import it from here
     FileNotFoundError = FileNotFoundError
+    from io import StringIO
 
 NO_LOGGER = logging.getLogger('ignore')
 NO_LOGGER.disabled = 1
@@ -302,31 +317,61 @@ def apply_backspaces_and_linefeeds(text):
 
     Interpret text like a terminal by removing backspace and linefeed
     characters and applying them line by line.
+
+    If final line ends with a carriage it keeps it to be concatenable with next
+    output chunk.
     """
-    lines = []
-    for line in text.split('\n'):
+    orig_lines = text.split('\n')
+    orig_lines_len = len(orig_lines)
+    new_lines = []
+    for orig_line_idx, orig_line in enumerate(orig_lines):
         chars, cursor = [], 0
-        for ch in line:
-            if ch == '\b':
-                cursor = max(0, cursor - 1)
-            elif ch == '\r':
+        orig_line_len = len(orig_line)
+        for orig_char_idx, orig_char in enumerate(orig_line):
+            if orig_char == '\r' and (orig_char_idx != orig_line_len - 1 or
+                                      orig_line_idx != orig_lines_len - 1):
                 cursor = 0
+            elif orig_char == '\b':
+                cursor = max(0, cursor - 1)
             else:
-                # normal character
+                if (orig_char == '\r' and
+                        orig_char_idx == orig_line_len - 1 and
+                        orig_line_idx == orig_lines_len - 1):
+                    cursor = len(chars)
                 if cursor == len(chars):
-                    chars.append(ch)
+                    chars.append(orig_char)
                 else:
-                    chars[cursor] = ch
+                    chars[cursor] = orig_char
                 cursor += 1
-        lines.append(''.join(chars))
-    return '\n'.join(lines)
+        new_lines.append(''.join(chars))
+    return '\n'.join(new_lines)
 
 
-# Code adapted from here:
-# https://blog.codinghorror.com/sorting-for-humans-natural-sort-order/
-def natural_sort(l):
-    def alphanum_key(key):
-        return [int(c) if c.isdigit() else c.lower()
-                for c in re.split('([0-9]+)', key)]
+def module_exists(modname):
+    """Checks if a module exists without actually importing it."""
+    return pkgutil.find_loader(modname) is not None
 
-    return sorted(l, key=alphanum_key)
+
+def modules_exist(*modnames):
+    return all(module_exists(m) for m in modnames)
+
+
+def module_is_in_cache(modname):
+    """Checks if a module was imported before (is in the import cache)."""
+    return modname in sys.modules
+
+
+def module_is_imported(modname, scope=None):
+    """Checks if a module is imported within the current namespace."""
+    # return early if modname is not even cached
+    if not module_is_in_cache(modname):
+        return False
+
+    if scope is None:  # use globals() of the caller by default
+        scope = inspect.stack()[1][0].f_globals
+
+    for m in scope.values():
+        if isinstance(m, type(sys)) and m.__name__ == modname:
+            return True
+
+    return False
