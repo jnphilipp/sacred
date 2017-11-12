@@ -11,8 +11,8 @@ from sacred.config import (ConfigDict, ConfigScope, create_captured_function,
                            load_config_file)
 from sacred.dependencies import (PEP440_VERSION_PATTERN, PackageDependency,
                                  Source, gather_sources_and_dependencies)
-from sacred.optional import basestring
-from sacred.utils import CircularDependencyError, optional_kwargs_decorator
+from sacred.utils import (CircularDependencyError, optional_kwargs_decorator,
+                          basestring)
 
 __sacred__ = True  # marks files that should be filtered from stack traces
 
@@ -54,7 +54,12 @@ class Ingredient(object):
         self.base_dir = os.path.dirname(os.path.abspath(mainfile_name))
         self.doc = _caller_globals.get('__doc__', "")
         self.mainfile, self.sources, self.dependencies = \
-            gather_sources_and_dependencies(_caller_globals, interactive)
+            gather_sources_and_dependencies(_caller_globals)
+        if self.mainfile is None and not interactive:
+            raise RuntimeError("Defining an experiment in interactive mode! "
+                               "The sourcecode cannot be stored and the "
+                               "experiment won't be reproducible. If you still"
+                               " want to run it pass interactive=True")
 
     # =========================== Decorators ==================================
     @optional_kwargs_decorator
@@ -302,11 +307,15 @@ class Ingredient(object):
         mainfile = (self.mainfile.to_json(self.base_dir)[0]
                     if self.mainfile else None)
 
+        def name_lower(d):
+            return d.name.lower()
+
         return dict(
             name=self.path,
             base_dir=self.base_dir,
             sources=[s.to_json(self.base_dir) for s in sorted(sources)],
-            dependencies=[d.to_json() for d in sorted(dependencies)],
+            dependencies=[d.to_json()
+                          for d in sorted(dependencies, key=name_lower)],
             repositories=collect_repositories(sources),
             mainfile=mainfile
         )
