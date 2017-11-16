@@ -353,7 +353,10 @@ def apply_backspaces_and_linefeeds(text):
                 else:
                     chars[cursor] = orig_char
                 cursor += 1
-        new_lines.append(''.join(chars))
+        new_line = ''.join(chars)
+        match = re.search(r'\[=*>?\.+\]\s-\sETA:', new_line)
+        if not match:
+            new_lines.append(new_line)
     return '\n'.join(new_lines)
 
 
