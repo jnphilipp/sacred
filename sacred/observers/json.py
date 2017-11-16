@@ -9,11 +9,17 @@ from sacred.observers.base import RunObserver
 
 
 class JSONObserver(RunObserver):
-    def __init__(self, base_dir, experiment=None, number_format='%03d', indent=4):
+    @classmethod
+    def create(cls, base_dir, _id=None, number_format='%03d', indent=4):
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+        return cls(base_dir, _id, number_format, indent)
+
+    def __init__(self, base_dir, _id, number_format, indent):
         self.base_dir = base_dir
+        self._id = int(_id) if _id is not None else -1
         self.number_format = number_format
         self.indent = indent
-        self.nb_experiment = int(experiment) if experiment is not None else -1
         self.experiment_dir = None
         self.run_entry = None
 
@@ -22,36 +28,32 @@ class JSONObserver(RunObserver):
         if not os.path.exists(experiments_dir):
             os.makedirs(experiments_dir)
 
-        if _id is None and self.nb_experiment is -1:
-            self.nb_experiment = sum(1 for e in os.scandir(experiments_dir) if e.is_dir())
-            self.experiment_dir = os.path.join(self.base_dir,
-                                               name,
-                                               self.number_format % self.nb_experiment)
+        if _id is None and self._id is -1:
+            self._id = sum(1 for e in os.scandir(experiments_dir) if e.is_dir())
+        self.experiment_dir = os.path.join(experiments_dir,
+                                           self.number_format % self._id)
+        if not os.path.exists(self.experiment_dir):
             os.makedirs(self.experiment_dir)
-        elif self.nb_experiment is not -1 and self.experiment_dir is None:
-            self.experiment_dir = os.path.join(self.base_dir,
-                                               name,
-                                               self.number_format % self.nb_experiment)
 
-    def queued_event(self, ex_info, command, queue_time, config, meta_info,
-                     _id):
-        self.create_dirs(ex_info['name'], _id)
+    def queued_event(self, ex_info, command, host_info, queue_time, config,
+                     meta_info, _id):
         self.run_entry = {
-            '_id': self.number_format % self.nb_experiment,
+            '_id': self.number_format % self._id,
             'experiment': dict(ex_info),
             'command': command,
+            'host': dict(host_info),
             'meta': meta_info,
             'status': 'QUEUED',
             'config': config
         }
+        self.create_dirs(ex_info['name'], _id)
         self.save()
-        return self.nb_experiment if _id is None else _id
+        return self._id if _id is None else _id
 
     def started_event(self, ex_info, command, host_info, start_time, config,
                       meta_info, _id):
-        self.create_dirs(ex_info['name'], _id)
         self.run_entry = {
-            '_id': self.number_format % self.nb_experiment,
+            '_id': self.number_format % self._id,
             'experiment': dict(ex_info),
             'command': command,
             'host': dict(host_info),
@@ -64,8 +66,9 @@ class JSONObserver(RunObserver):
             'captured_out': '',
             'info': {},
         }
+        self.create_dirs(ex_info['name'], _id)
         self.save()
-        return self.nb_experiment if _id is None else _id
+        return self._id if _id is None else _id
 
     def heartbeat_event(self, info, captured_out, beat_time, result):
         self.run_entry['info'] = info
@@ -80,9 +83,12 @@ class JSONObserver(RunObserver):
         self.save()
 
         if result:
-            experiments_path = os.path.join(self.base_dir,
-                                            self.run_entry['experiment']['name'],
-                                            'experiments.csv')
+            experiments_path = os.path.join(
+                self.base_dir,
+                self.run_entry['experiment']['name'],
+                'experiments.csv'
+            )
+            ex = self.number_format % self._id
             fields = ['experiment'] + list(result.keys())
             experiments = []
             if os.path.exists(experiments_path):
@@ -93,7 +99,7 @@ class JSONObserver(RunObserver):
                         if k not in fields:
                             fields.append(k)
                     for row in reader:
-                        if row['experiment'] == self.number_format % self.nb_experiment:
+                        if row['experiment'] == ex:
                             for k in row.keys():
                                 if k is not 'experiment' and k not in result:
                                     result[k] = row[k]
@@ -104,7 +110,7 @@ class JSONObserver(RunObserver):
                 writer = csv.DictWriter(f, fields, dialect='unix')
                 writer.writeheader()
                 writer.writerows(experiments)
-                result['experiment'] = self.number_format % self.nb_experiment
+                result['experiment'] = ex
                 writer.writerow(result)
 
     def interrupted_event(self, interrupt_time, status):
@@ -127,11 +133,13 @@ class JSONObserver(RunObserver):
         self.save()
 
     def save(self):
-        with open(os.path.join(self.experiment_dir,
-                               'sacred-%s.json' % self.run_entry['command']),
-                  'w', encoding='utf8') as f:
-            f.write(json.dumps(self.run_entry, indent=4, default=json_util.default))
-            f.write('\n')
+        if os.path.exists(self.experiment_dir):
+            filename = 'sacred-%s.json' % self.run_entry['command']
+            with open(os.path.join(self.experiment_dir, filename), 'w',
+                      encoding='utf8') as f:
+                f.write(json.dumps(self.run_entry, indent=self.indent,
+                                   default=json_util.default))
+                f.write('\n')
 
     def __eq__(self, other):
         if isinstance(other, JSONObserver):
