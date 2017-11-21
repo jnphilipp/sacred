@@ -22,6 +22,7 @@ class JSONObserver(RunObserver):
         self.indent = indent
         self.experiment_dir = None
         self.run_entry = None
+        self.cout = ""
 
     def create_dirs(self, name, _id):
         experiments_dir = os.path.join(self.base_dir, name)
@@ -63,17 +64,18 @@ class JSONObserver(RunObserver):
             'status': 'RUNNING',
             'resources': [],
             'artifacts': [],
-            'captured_out': '',
             'info': {},
         }
+        self.cout = ""
+
         self.create_dirs(ex_info['name'], _id)
         self.save()
         return self._id if _id is None else _id
 
     def heartbeat_event(self, info, captured_out, beat_time, result):
         self.run_entry['info'] = info
-        self.run_entry['captured_out'] = captured_out
         self.run_entry['result'] = result
+        self.cout = captured_out
         self.save()
 
     def completed_event(self, stop_time, result):
@@ -140,6 +142,10 @@ class JSONObserver(RunObserver):
                 f.write(json.dumps(self.run_entry, indent=self.indent,
                                    default=json_util.default))
                 f.write('\n')
+
+            filename = 'sacred-%s.out' % self.run_entry['command']
+            with open(os.path.join(self.experiment_dir, filename), 'wb') as f:
+                f.write(self.cout.encode('utf-8'))
 
     def __eq__(self, other):
         if isinstance(other, JSONObserver):
