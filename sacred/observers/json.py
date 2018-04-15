@@ -39,6 +39,8 @@ class JSONObserver(RunObserver):
 
     def queued_event(self, ex_info, command, host_info, queue_time, config,
                      meta_info, _id):
+        self.create_dirs(ex_info['name'], _id)
+
         self.run_entry = {
             '_id': self.number_format % self._id,
             'experiment': dict(ex_info),
@@ -48,12 +50,14 @@ class JSONObserver(RunObserver):
             'status': 'QUEUED',
             'config': config
         }
-        self.create_dirs(ex_info['name'], _id)
         self.save()
         return self._id if _id is None else _id
 
     def started_event(self, ex_info, command, host_info, start_time, config,
                       meta_info, _id):
+        self.create_dirs(ex_info['name'], _id)
+
+        self.cout = ""
         self.run_entry = {
             '_id': self.number_format % self._id,
             'experiment': dict(ex_info),
@@ -67,9 +71,6 @@ class JSONObserver(RunObserver):
             'artifacts': [],
             'info': {},
         }
-        self.cout = ""
-
-        self.create_dirs(ex_info['name'], _id)
         self.save()
         return self._id if _id is None else _id
 
