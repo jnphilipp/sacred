@@ -30,7 +30,8 @@ class JSONObserver(RunObserver):
             os.makedirs(experiments_dir)
 
         if _id is None and self._id is -1:
-            self._id = sum(1 for e in os.scandir(experiments_dir) if e.is_dir())
+            self._id = sum(1 for e in os.scandir(experiments_dir)
+                           if e.is_dir() and e.name.isdigit())
         self.experiment_dir = os.path.join(experiments_dir,
                                            self.number_format % self._id)
         if not os.path.exists(self.experiment_dir):
