@@ -14,8 +14,6 @@ import sacred.optional as opt
 from sacred import SETTINGS
 from sacred.utils import is_subdir, iter_prefixes, basestring
 
-__sacred__ = True  # marks files that should be filtered from stack traces
-
 MB = 1048576
 MODULE_BLACKLIST = set(sys.builtin_module_names)
 # sadly many builtins are missing from the above, so we list them manually:
@@ -143,7 +141,7 @@ def get_commit_if_possible(filename):
             is_dirty = repo.is_dirty()
             commit = repo.head.commit.hexsha
             return path, commit, is_dirty
-        except (InvalidGitRepositoryError, ValueError) as e:
+        except (InvalidGitRepositoryError, ValueError):
             pass
     return None, None, None
 

@@ -53,11 +53,17 @@ class MongoObserver(RunObserver):
     VERSION = 'MongoObserver-0.7.0'
 
     @staticmethod
-    def create(url='localhost', db_name='sacred', collection='runs',
-               overwrite=None, priority=DEFAULT_MONGO_PRIORITY, **kwargs):
+    def create(url=None, db_name='sacred', collection='runs',
+               overwrite=None, priority=DEFAULT_MONGO_PRIORITY,
+               client=None, **kwargs):
         import pymongo
         import gridfs
-        client = pymongo.MongoClient(url, **kwargs)
+
+        if client is not None:
+            assert isinstance(client, pymongo.MongoClient)
+            assert url is None, 'Cannot pass both a client and an url.'
+        else:
+            client = pymongo.MongoClient(url, **kwargs)
         database = client[db_name]
         if collection in MongoObserver.COLLECTION_NAME_BLACKLIST:
             raise KeyError('Collection name "{}" is reserved. '

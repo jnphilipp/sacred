@@ -17,8 +17,6 @@ from sacred.utils import (convert_to_nested_dict, create_basic_stream_logger,
                           iterate_flattened, set_by_dotted_path,
                           recursive_update, iter_prefixes, join_paths)
 
-__sacred__ = True  # marks files that should be filtered from stack traces
-
 
 class Scaffold(object):
     def __init__(self, config_scopes, subrunners, path, captured_functions,
@@ -71,7 +69,7 @@ class Scaffold(object):
                 subrunner.set_up_seed(self.rnd)
 
     def gather_fallbacks(self):
-        fallback = {}
+        fallback = {'_log': self.logger}
         for sr_path, subrunner in self.subrunners.items():
             if self.path and is_prefix(self.path, sr_path):
                 path = sr_path[len(self.path):].strip('.')
@@ -89,7 +87,7 @@ class Scaffold(object):
         else:
             nc = self.named_configs[config_name]
 
-        cfg = nc(fixed=self.config_updates,
+        cfg = nc(fixed=self.get_config_updates_recursive(),
                  preset=self.presets,
                  fallback=self.fallback)
 
@@ -119,6 +117,12 @@ class Scaffold(object):
                    for key, value in iterate_flattened(self.config_updates)})
         for cfg_summary in self.summaries:
             self.config_mods.update_from(cfg_summary)
+
+    def get_config_updates_recursive(self):
+        config_updates = self.config_updates.copy()
+        for sr_path, subrunner in self.subrunners.items():
+            config_updates[sr_path] = subrunner.get_config_updates_recursive()
+        return config_updates
 
     def get_fixture(self):
         if self.fixture is not None:
@@ -209,7 +213,7 @@ def distribute_named_configs(scaffolding, named_configs):
             scaffolding[path].use_named_config(cfg_name)
 
 
-def initialize_logging(experiment, scaffolding):
+def initialize_logging(experiment, scaffolding, log_level=None):
     if experiment.logger is None:
         root_logger = create_basic_stream_logger()
     else:
@@ -220,6 +224,14 @@ def initialize_logging(experiment, scaffolding):
             scaffold.logger = root_logger.getChild(sc_path)
         else:
             scaffold.logger = root_logger
+
+    # set log level
+    if log_level is not None:
+        try:
+            lvl = int(log_level)
+        except ValueError:
+            lvl = log_level
+        root_logger.setLevel(lvl)
 
     return root_logger, root_logger.getChild(experiment.path)
 
@@ -328,7 +340,7 @@ def get_scaffolding_and_config_name(named_config, scaffolding):
 
 
 def create_run(experiment, command_name, config_updates=None,
-               named_configs=(), force=False):
+               named_configs=(), force=False, log_level=None):
 
     sorted_ingredients = gather_ingredients_topological(experiment)
     scaffolding = create_scaffolding(experiment, sorted_ingredients)
@@ -341,7 +353,8 @@ def create_run(experiment, command_name, config_updates=None,
     # Phase 1: Config updates
     config_updates = config_updates or {}
     config_updates = convert_to_nested_dict(config_updates)
-    root_logger, run_logger = initialize_logging(experiment, scaffolding)
+    root_logger, run_logger = initialize_logging(experiment, scaffolding,
+                                                 log_level)
     distribute_config_updates(prefixes, scaffolding, config_updates)
 
     # Phase 2: Named Configs
