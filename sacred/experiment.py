@@ -14,7 +14,8 @@ from sacred.arg_parser import format_usage, get_config_updates
 from sacred.commandline_options import (
     ForceOption, gather_command_line_options, LoglevelOption)
 from sacred.commands import (help_for_command, print_config,
-                             print_dependencies, save_config)
+                             print_dependencies, save_config,
+                             print_named_configs)
 from sacred.config.signature import Signature
 from sacred.ingredient import Ingredient
 from sacred.initialize import create_run
@@ -82,6 +83,7 @@ class Experiment(Ingredient):
         self.command(print_config, unobserved=True)
         self.command(print_dependencies, unobserved=True)
         self.command(save_config, unobserved=True)
+        self.command(print_named_configs(self), unobserved=True)
         self.observers = []
         self.current_run = None
         self.captured_out_filter = None
@@ -164,7 +166,7 @@ class Experiment(Ingredient):
 
     def get_usage(self, program_name=None):
         """Get the commandline usage string for this experiment."""
-        program_name = os.path.relpath(program_name or sys.argv[0],
+        program_name = os.path.relpath(program_name or sys.argv[0] or 'Dummy',
                                        self.base_dir)
         commands = OrderedDict(self.gather_commands())
         options = gather_command_line_options()
@@ -319,7 +321,7 @@ class Experiment(Ingredient):
         assert self.current_run is not None, "Can only be called during a run."
         self.current_run.add_resource(filename)
 
-    def add_artifact(self, filename, name=None):
+    def add_artifact(self, filename, name=None, metadata=None):
         """Add a file as an artifact.
 
         In Sacred terminology an artifact is a file produced by the experiment
@@ -336,10 +338,12 @@ class Experiment(Ingredient):
         name : str, optional
             optionally set the name of the artifact.
             Defaults to the relative file-path.
-
+        metadata: dict, optional
+            optionally attach metadata to the artifact.
+            This only has an effect when using the MongoObserver.
         """
         assert self.current_run is not None, "Can only be called during a run."
-        self.current_run.add_artifact(filename, name)
+        self.current_run.add_artifact(filename, name, metadata)
 
     @property
     def info(self):
@@ -364,7 +368,7 @@ class Experiment(Ingredient):
         during a heartbeat event.
         Other observers are not yet supported.
 
-        :param metric_name: The name of the metric, e.g. training.loss
+        :param name: The name of the metric, e.g. training.loss
         :param value: The measured value
         :param step: The step number (integer), e.g. the iteration number
                     If not specified, an internal counter for each metric

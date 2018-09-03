@@ -2,7 +2,6 @@
 # coding=utf-8
 from __future__ import division, print_function, unicode_literals
 
-import atexit
 import datetime
 import os.path
 import sys
@@ -11,8 +10,8 @@ import traceback as tb
 from sacred import metrics_logger
 from sacred.metrics_logger import linearize_metrics
 from sacred.randomness import set_global_seed
-from sacred.utils import SacredInterrupt, join_paths, \
-    IntervalTimer
+from sacred.utils import (SacredInterrupt, join_paths,
+                          IntervalTimer)
 from sacred.stdout_capturing import get_stdcapturer
 
 
@@ -158,7 +157,7 @@ class Run(object):
         filename = os.path.abspath(filename)
         self._emit_resource_added(filename)
 
-    def add_artifact(self, filename, name=None):
+    def add_artifact(self, filename, name=None, metadata=None):
         """Add a file as an artifact.
 
         In Sacred terminology an artifact is a file produced by the experiment
@@ -174,10 +173,13 @@ class Run(object):
         name : str, optional
             optionally set the name of the artifact.
             Defaults to the filename.
+        metadata: dict
+            optionally attach metadata to the artifact.
+            This only has an effect when using the MongoObserver.
         """
         filename = os.path.abspath(filename)
         name = os.path.basename(filename) if name is None else name
-        self._emit_artifact_added(name, filename)
+        self._emit_artifact_added(name, filename, metadata)
 
     def __call__(self, *args):
         r"""Start this run.
@@ -375,11 +377,12 @@ class Run(object):
         for observer in self.observers:
             self._safe_call(observer, 'resource_event', filename=filename)
 
-    def _emit_artifact_added(self, name, filename):
+    def _emit_artifact_added(self, name, filename, metadata):
         for observer in self.observers:
             self._safe_call(observer, 'artifact_event',
                             name=name,
-                            filename=filename)
+                            filename=filename,
+                            metadata=metadata)
 
     def _safe_call(self, obs, method, **kwargs):
         if obs not in self._failed_observers and hasattr(obs, method):
