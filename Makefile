@@ -5,3 +5,4 @@ ARGS :=
 
 install:
 	${PIP} install --upgrade bson cairocffi GitPython graphviz lxml pymongo ${ARGS}
+	${PYTHON} setup.py install ${ARGS}
