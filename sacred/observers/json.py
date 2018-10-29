@@ -86,37 +86,6 @@ class JSONObserver(RunObserver):
         self.run_entry['status'] = 'COMPLETED'
         self.save()
 
-        if result:
-            experiments_path = os.path.join(
-                self.base_dir,
-                self.run_entry['experiment']['name'],
-                'experiments.csv'
-            )
-            ex = self.number_format % self._id
-            fields = ['experiment'] + list(result.keys())
-            experiments = []
-            if os.path.exists(experiments_path):
-                with open(experiments_path, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    fields = reader.fieldnames
-                    for k in result.keys():
-                        if k not in fields:
-                            fields.append(k)
-                    for row in reader:
-                        if row['experiment'] == ex:
-                            for k in row.keys():
-                                if k is not 'experiment' and k not in result:
-                                    result[k] = row[k]
-                        else:
-                            experiments.append(row)
-
-            with open(experiments_path, 'w', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fields, dialect='unix')
-                writer.writeheader()
-                writer.writerows(experiments)
-                result['experiment'] = ex
-                writer.writerow(result)
-
     def interrupted_event(self, interrupt_time, status):
         self.run_entry['stop_time'] = interrupt_time.isoformat()
         self.run_entry['status'] = status
