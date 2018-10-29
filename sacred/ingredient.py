@@ -363,6 +363,7 @@ class Ingredient(object):
 
     def traverse_ingredients(self):
         """Recursively traverse this ingredient and its sub-ingredients.
+
         Yields
         ------
         ingredient: sacred.Ingredient
@@ -376,11 +377,12 @@ class Ingredient(object):
             If a circular structure among ingredients was detected.
         """
         if self._is_traversing:
-            raise CircularDependencyError()
+            raise CircularDependencyError(ingredients=[self])
         else:
             self._is_traversing = True
         yield self, 0
-        for ingredient in self.ingredients:
-            for ingred, depth in ingredient.traverse_ingredients():
-                yield ingred, depth + 1
+        with CircularDependencyError.track(self):
+            for ingredient in self.ingredients:
+                for ingred, depth in ingredient.traverse_ingredients():
+                    yield ingred, depth + 1
         self._is_traversing = False
