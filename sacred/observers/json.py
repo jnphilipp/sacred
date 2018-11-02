@@ -20,7 +20,7 @@ class JSONObserver(RunObserver):
         self._id = int(_id) if _id is not None else -1
         self.number_format = number_format
         self.indent = indent
-        self.experiment_dir = None
+        self.run_dir = None
         self.run_entry = None
         self.cout = ""
 
@@ -32,10 +32,10 @@ class JSONObserver(RunObserver):
         if _id is None and self._id is -1:
             self._id = sum(1 for e in os.scandir(experiments_dir)
                            if e.is_dir() and e.name.isdigit())
-        self.experiment_dir = os.path.join(experiments_dir,
-                                           self.number_format % self._id)
-        if not os.path.exists(self.experiment_dir):
-            os.makedirs(self.experiment_dir)
+        self.run_dir = os.path.join(experiments_dir,
+                                    self.number_format % self._id)
+        if not os.path.exists(self.run_dir):
+            os.makedirs(self.run_dir)
 
     def queued_event(self, ex_info, command, host_info, queue_time, config,
                      meta_info, _id):
@@ -106,16 +106,16 @@ class JSONObserver(RunObserver):
         self.save()
 
     def save(self):
-        if os.path.exists(self.experiment_dir):
+        if os.path.exists(self.run_dir):
             filename = 'sacred-%s.json' % self.run_entry['command']
-            with open(os.path.join(self.experiment_dir, filename), 'w',
+            with open(os.path.join(self.run_dir, filename), 'w',
                       encoding='utf8') as f:
                 f.write(json.dumps(self.run_entry, indent=self.indent,
                                    default=json_util.default))
                 f.write('\n')
 
             filename = 'sacred-%s.out' % self.run_entry['command']
-            with open(os.path.join(self.experiment_dir, filename), 'wb') as f:
+            with open(os.path.join(self.run_dir, filename), 'wb') as f:
                 f.write(self.cout.encode('utf-8'))
 
     def __eq__(self, other):
