@@ -105,18 +105,46 @@ class JSONObserver(RunObserver):
         self.run_entry['artifacts'].append(name)
         self.save()
 
+    def log_metrics(self, metrics_by_name, info):
+        """Store new measurements into sacred-metrics-COMMAND.json.
+        """
+        if os.path.exists(self.run_dir):
+            filename = 'sacred-metrics-%s.json' % self.run_entry['command']
+
+            metrics = {}
+            metrics_path = os.path.join(self.run_dir, filename)
+            if os.path.exists(metrics_path):
+                with open(metrics_path, 'r', encoding='utf-8') as f:
+                    metrics = json.load(f)
+
+        for k, v in metrics_by_name.items():
+            if k not in metrics:
+                metrics[k] = {'values': [], 'steps': [], 'timestamps': []}
+
+            metrics[k]['values'] += v['values']
+            metrics[k]['steps'] += v['steps']
+
+            # Manually convert them to avoid passing a datetime dtype handler
+            # when we're trying to convert into json.
+            timestamps = [ts.isoformat() for ts in v['timestamps']]
+            metrics[k]['timestamps'] += timestamps
+        self.save_json(filename, metrics)
+
     def save(self):
         if os.path.exists(self.run_dir):
             filename = 'sacred-%s.json' % self.run_entry['command']
-            with open(os.path.join(self.run_dir, filename), 'w',
-                      encoding='utf8') as f:
-                f.write(json.dumps(self.run_entry, indent=self.indent,
-                                   default=json_util.default))
-                f.write('\n')
+            self.save_json(filename, self.run_entry)
 
             filename = 'sacred-%s.out' % self.run_entry['command']
             with open(os.path.join(self.run_dir, filename), 'wb') as f:
                 f.write(self.cout.encode('utf-8'))
+
+    def save_json(self, filename, obj):
+        with open(os.path.join(self.run_dir, filename), 'w',
+                  encoding='utf-8') as f:
+            f.write(json.dumps(obj, sort_keys=True, indent=self.indent,
+                               default=json_util.default))
+            f.write('\n')
 
     def __eq__(self, other):
         if isinstance(other, JSONObserver):
