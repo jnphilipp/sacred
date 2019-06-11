@@ -93,3 +93,6 @@ com_crashlytics_export_strings.xml
 # GEdit temporary files
 *~
 
+## Sublime Text
+sacred.sublime-project
+sacred.sublime-workspace
