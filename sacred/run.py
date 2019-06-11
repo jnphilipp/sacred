@@ -157,7 +157,13 @@ class Run(object):
         filename = os.path.abspath(filename)
         self._emit_resource_added(filename)
 
-    def add_artifact(self, filename, name=None, metadata=None):
+    def add_artifact(
+            self,
+            filename,
+            name=None,
+            metadata=None,
+            content_type=None,
+    ):
         """Add a file as an artifact.
 
         In Sacred terminology an artifact is a file produced by the experiment
@@ -176,10 +182,13 @@ class Run(object):
         metadata: dict
             optionally attach metadata to the artifact.
             This only has an effect when using the MongoObserver.
+        content_type: str, optional
+            optionally attach a content-type to the artifact.
+            This only has an effect when using the MongoObserver.
         """
         filename = os.path.abspath(filename)
         name = os.path.basename(filename) if name is None else name
-        self._emit_artifact_added(name, filename, metadata)
+        self._emit_artifact_added(name, filename, metadata, content_type)
 
     def __call__(self, *args):
         r"""Start this run.
@@ -269,7 +278,7 @@ class Run(object):
         # only stop if heartbeat was started
         if self._heartbeat is not None:
             self._stop_heartbeat_event.set()
-            self._heartbeat.join(2)
+            self._heartbeat.join(timeout=2)
 
     def _emit_queued(self):
         self.status = 'QUEUED'
@@ -377,12 +386,13 @@ class Run(object):
         for observer in self.observers:
             self._safe_call(observer, 'resource_event', filename=filename)
 
-    def _emit_artifact_added(self, name, filename, metadata):
+    def _emit_artifact_added(self, name, filename, metadata, content_type):
         for observer in self.observers:
             self._safe_call(observer, 'artifact_event',
                             name=name,
                             filename=filename,
-                            metadata=metadata)
+                            metadata=metadata,
+                            content_type=content_type)
 
     def _safe_call(self, obs, method, **kwargs):
         if obs not in self._failed_observers and hasattr(obs, method):
@@ -402,6 +412,11 @@ class Run(object):
                 # finishing up, so we don't want one observer to kill the
                 # others
                 self.run_logger.error(tb.format_exc())
+
+    def _wait_for_observers(self):
+        """Block until all observers finished processing."""
+        for observer in self.observers:
+            self._safe_call(observer, 'join')
 
     def _warn_about_failed_observers(self):
         for observer in self._failed_observers:

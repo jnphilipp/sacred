@@ -8,7 +8,7 @@ Sacred
 
 |pypi| |py_versions| |license| |rtfd| |doi|
 
-|unix_build| |windows_build| |coverage| |code_quality| |codacy|
+|unix_build| |windows_build| |coverage| |code_quality|
 
 
 
@@ -91,12 +91,12 @@ optional dependencies but they offer some cool features:
 
 Tests
 -----
-The tests for sacred use the `py.test <http://pytest.org/latest/>`_ package.
-You can execute them by running ``py.test`` in the sacred directory like this:
+The tests for sacred use the `pytest <http://pytest.org/latest/>`_ package.
+You can execute them by running ``pytest`` in the sacred directory like this:
 
-    py.test
+    pytest
 
-There is also a config file for `tox <https://testrun.org/tox/latest/>`_ so you
+There is also a config file for `tox <https://tox.readthedocs.io/en/latest/>`_ so you
 can automatically run the tests for various python versions like this:
 
     tox
@@ -106,9 +106,11 @@ Contributing
 If you find a bug, have a feature request or want to discuss something general you are welcome to open an
 `issue <https://github.com/IDSIA/sacred/issues>`_. If you have a specific question related
 to the usage of sacred, please ask a question on StackOverflow under the
-`python-sacred tag <https://stackoverflow.com/questions/tagged/python-sacred>`_.
+`python-sacred tag <https://stackoverflow.com/questions/tagged/python-sacred>`_. We value documentation
+a lot. If you find something that should be included in the documentation please
+document it or let us know whats missing. If you are using Sacred in one of your projects and want to share
+your code with others, put your repo in the `Projects using Sacred <docs/projects_using_sacred.rst`>_ list.
 Pull requests are highly welcome!
-
 
 Frontends
 ---------
@@ -248,8 +250,5 @@ in Proceedings of the 15th Python in Science Conference (SciPy 2017), Austin, Te
     :target: https://scrutinizer-ci.com/g/IDSIA/sacred/
     :alt: Code Scrutinizer Quality
 
-.. |codacy| image:: https://img.shields.io/codacy/acb7bba4467e47deaf260d6df5c0279f.svg?style=flat
-    :target: https://www.codacy.com/app/qwlouse/sacred
-    :alt: Codacity rating
 
 

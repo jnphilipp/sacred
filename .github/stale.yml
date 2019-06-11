@@ -1,14 +1,21 @@
 # Number of days of inactivity before an issue becomes stale
-daysUntilStale: 30
+daysUntilStale: 90
 
 # Number of days of inactivity before a stale issue is closed
 daysUntilClose: 7
 
 # Issues with these labels will never be considered stale
- exemptLabels: []
+exemptLabels:
+  - feature
+  - bug
+  - documentation
+  - high priority
+  - in progress
+  - question
+  - refactoring
 
 # Label to use when marking an issue as stale
-staleLabel: wontfix
+staleLabel: stale
 
 # Set to true to ignore issues in a project (defaults to false)
 exemptProjects: true
