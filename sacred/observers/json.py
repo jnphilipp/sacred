@@ -101,7 +101,7 @@ class JSONObserver(RunObserver):
         self.run_entry['resources'].append(filename)
         self.save()
 
-    def artifact_event(self, name, filename):
+    def artifact_event(self, name, filename, metadata=None, content_type=None):
         self.run_entry['artifacts'].append(name)
         self.save()
 
