@@ -179,7 +179,7 @@ class Experiment(Ingredient):
         return short_usage, long_usage, internal_usage
 
     def run(self, command_name=None, config_updates=None, named_configs=(),
-            meta_info=None, options=None):
+            info=None, meta_info=None, options=None):
         """
         Run the main function of the experiment or a given command.
 
@@ -194,6 +194,9 @@ class Experiment(Ingredient):
         named_configs : list[str], optional
             list of names of named_configs to use
 
+        info : dict, optional
+            Additional information for this run.
+
         meta_info : dict, optional
             Additional meta information for this run.
 
@@ -207,23 +210,9 @@ class Experiment(Ingredient):
 
         """
         run = self._create_run(command_name, config_updates, named_configs,
-                               meta_info, options)
+                               info, meta_info, options)
         run()
         return run
-
-    def run_command(self, command_name, config_updates=None,
-                    named_configs=(), args=(), meta_info=None):
-        """Run the command with the given name.
-
-        .. note:: Deprecated in Sacred 0.7
-            run_command() will be removed in Sacred 1.0.
-            It is replaced by run() which can now also handle command_names.
-        """
-        import warnings
-        warnings.warn("run_command is deprecated. Use run instead",
-                      DeprecationWarning)
-        return self.run(command_name, config_updates, named_configs, meta_info,
-                        args)
 
     def run_commandline(self, argv=None):
         """
@@ -253,13 +242,14 @@ class Experiment(Ingredient):
         if not args['help'] and err:
             print(short_usage)
             print(err)
-            exit(1)
+            sys.exit(1)
 
         if self._handle_help(args, usage):
-            exit()
+            sys.exit()
 
         try:
-            return self.run(cmd_name, config_updates, named_configs, {}, args)
+            return self.run(cmd_name, config_updates, named_configs, info={},
+                            meta_info={}, options=args)
         except Exception as e:
             if self.current_run:
                 debug = self.current_run.debug
@@ -287,7 +277,7 @@ class Experiment(Ingredient):
                     print(format_sacred_error(e, short_usage), file=sys.stderr)
                 else:
                     print_filtered_stacktrace()
-                exit(1)
+                sys.exit(1)
 
     def open_resource(self, filename, mode='r'):
         """Open a file and also save it as a resource.
@@ -434,7 +424,7 @@ class Experiment(Ingredient):
     # =========================== Internal Interface ==========================
 
     def _create_run(self, command_name=None, config_updates=None,
-                    named_configs=(), meta_info=None, options=None):
+                    named_configs=(), info=None, meta_info=None, options=None):
         command_name = command_name or self.default_command
         if command_name is None:
             raise RuntimeError('No command found to be run. Specify a command '
@@ -454,6 +444,9 @@ class Experiment(Ingredient):
                          force=options.get(ForceOption.get_flag(), False),
                          log_level=options.get(LoglevelOption.get_flag(),
                                                None))
+        if info is not None:
+            run.info.update(info)
+
         run.meta_info['command'] = command_name
         run.meta_info['options'] = options
 
