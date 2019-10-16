@@ -93,6 +93,8 @@ com_crashlytics_export_strings.xml
 # GEdit temporary files
 *~
 
+pip-wheel-metadata/
+
 ## Sublime Text
-sacred.sublime-project
-sacred.sublime-workspace
+*.sublime-project
+*.sublime-workspace

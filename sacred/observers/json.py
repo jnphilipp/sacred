@@ -9,13 +9,7 @@ from sacred.observers.base import RunObserver
 
 
 class JSONObserver(RunObserver):
-    @classmethod
-    def create(cls, base_dir, _id=None, number_format='%03d', indent=4):
-        if not os.path.exists(base_dir):
-            os.makedirs(base_dir)
-        return cls(base_dir, _id, number_format, indent)
-
-    def __init__(self, base_dir, _id, number_format, indent):
+    def __init__(self, base_dir, _id=None, number_format='%03d', indent=4):
         self.base_dir = base_dir
         self._id = int(_id) if _id is not None else -1
         self.number_format = number_format
