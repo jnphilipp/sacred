@@ -4,16 +4,18 @@ import csv
 import json
 import os
 
-from bson import json_util
 from sacred.observers.base import RunObserver
+from sacred.serializer import flatten
 
 
 class JSONObserver(RunObserver):
-    def __init__(self, base_dir, _id=None, number_format='%03d', indent=4):
+    def __init__(self, base_dir, _id=None, number_format='%03d', indent=4,
+                 ensure_ascii=False):
         self.base_dir = base_dir
         self._id = int(_id) if _id is not None else -1
         self.number_format = number_format
         self.indent = indent
+        self.ensure_ascii = ensure_ascii
         self.run_dir = None
         self.run_entry = None
         self.cout = ""
@@ -136,8 +138,9 @@ class JSONObserver(RunObserver):
     def save_json(self, filename, obj):
         with open(os.path.join(self.run_dir, filename), 'w',
                   encoding='utf-8') as f:
-            f.write(json.dumps(obj, sort_keys=True, indent=self.indent,
-                               default=json_util.default))
+            f.write(json.dumps(flatten(obj), sort_keys=True,
+                               indent=self.indent,
+                               ensure_ascii=self.ensure_ascii))
             f.write('\n')
 
     def __eq__(self, other):
