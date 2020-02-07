@@ -21,7 +21,7 @@ class JSONObserver(RunObserver):
         self.cout = ""
 
     def create_dirs(self, name, _id):
-        experiments_dir = os.path.join(self.base_dir, name)
+        experiments_dir = self.base_dir.format(name=name, experiment_name=name)
         if not os.path.exists(experiments_dir):
             os.makedirs(experiments_dir)
 
