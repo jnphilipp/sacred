@@ -165,12 +165,14 @@ class DogmaticList(list):
 
 
 class ReadOnlyContainer:
-    def __init__(self, *args, message=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.message = message or "This container is read-only!"
+    def __reduce__(self):
+        return self.__class__, (self.__copy__(),)
 
     def _readonly(self, *args, **kwargs):
-        raise SacredError(self.message, filter_traceback="always")
+        raise SacredError(
+            "The configuration is read-only in a captured function!",
+            filter_traceback="always",
+        )
 
 
 class ReadOnlyDict(ReadOnlyContainer, dict):
@@ -184,11 +186,6 @@ class ReadOnlyDict(ReadOnlyContainer, dict):
     update = ReadOnlyContainer._readonly
     __setitem__ = ReadOnlyContainer._readonly
     __delitem__ = ReadOnlyContainer._readonly
-
-    def __init__(self, *args, message=None, **kwargs):
-        if message is None:
-            message = "This ReadOnlyDict is read-only!"
-        super().__init__(*args, message=message, **kwargs)
 
     def __copy__(self):
         return {**self}
@@ -212,11 +209,6 @@ class ReadOnlyList(ReadOnlyContainer, list):
     __setitem__ = ReadOnlyContainer._readonly
     __delitem__ = ReadOnlyContainer._readonly
 
-    def __init__(self, *iterable, message=None, **kwargs):
-        if message is None:
-            message = "This ReadOnlyList is read-only!"
-        super().__init__(*iterable, message=message, **kwargs)
-
     def __copy__(self):
         return [*self]
 
@@ -225,7 +217,7 @@ class ReadOnlyList(ReadOnlyContainer, list):
         return copy.deepcopy(lst, memo=memo)
 
 
-def make_read_only(o, error_message=None):
+def make_read_only(o):
     """Makes objects read-only.
 
     Converts every `list` and `dict` into `ReadOnlyList` and `ReadOnlyDict` in
@@ -233,18 +225,29 @@ def make_read_only(o, error_message=None):
     but returns the converted structure.
     """
     if type(o) == dict:
-        return ReadOnlyDict(
-            {k: make_read_only(v, error_message) for k, v in o.items()},
-            message=error_message,
-        )
+        return ReadOnlyDict({k: make_read_only(v) for k, v in o.items()})
     elif type(o) == list:
-        return ReadOnlyList(
-            [make_read_only(v, error_message) for v in o], message=error_message
-        )
+        return ReadOnlyList([make_read_only(v) for v in o])
     elif type(o) == tuple:
         return tuple(map(make_read_only, o))
     else:
         return o
+
+
+if opt.has_yaml:
+    # Register read-only containers for yaml
+    def read_only_dict_representer(dumper, data):
+        """Saves `ReadOnlyDict` as `dict`."""
+        return dumper.represent_dict(data)
+
+    def read_only_list_representer(dumper, data):
+        """Saves `ReadOnlyList` as `list`."""
+        return dumper.represent_list(data)
+
+    opt.yaml.add_representer(ReadOnlyDict, read_only_dict_representer)
+    opt.yaml.add_representer(ReadOnlyList, read_only_list_representer)
+    opt.yaml.SafeDumper.add_representer(ReadOnlyDict, read_only_dict_representer)
+    opt.yaml.SafeDumper.add_representer(ReadOnlyList, read_only_list_representer)
 
 
 SIMPLIFY_TYPE = {

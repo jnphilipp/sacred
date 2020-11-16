@@ -4,6 +4,7 @@
 import os
 import sys
 import subprocess
+import warnings
 from io import StringIO
 from contextlib import contextmanager
 import wrapt
@@ -116,8 +117,11 @@ def tee_output_python():
 @contextmanager
 def tee_output_fd():
     """Duplicate stdout and stderr to a file on the file descriptor level."""
-    get_temp_file = lambda: NamedTemporaryFile(mode="w+", newline="") \
-        if sys.version_info >= (3,) else NamedTemporaryFile(mode="w+")
+    get_temp_file = (
+        lambda: NamedTemporaryFile(mode="w+", newline="")
+        if sys.version_info >= (3,)
+        else NamedTemporaryFile(mode="w+")
+    )
     with get_temp_file() as target:
         original_stdout_fd = 1
         original_stderr_fd = 2
@@ -174,8 +178,17 @@ def tee_output_fd():
             os.dup2(saved_stdout_fd, original_stdout_fd)
             os.dup2(saved_stderr_fd, original_stderr_fd)
 
-            tee_stdout.wait(timeout=1)
-            tee_stderr.wait(timeout=1)
+            try:
+                tee_stdout.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                warnings.warn("tee_stdout.wait timeout. Forcibly terminating.")
+                tee_stdout.terminate()
+
+            try:
+                tee_stderr.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                warnings.warn("tee_stderr.wait timeout. Forcibly terminating.")
+                tee_stderr.terminate()
 
             os.close(saved_stdout_fd)
             os.close(saved_stderr_fd)
