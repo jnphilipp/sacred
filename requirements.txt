@@ -7,7 +7,7 @@ colorama>=0.4
 packaging>=18.0
 GitPython
 
-bson
+#bson
 cairocffi
 graphviz
 lxml

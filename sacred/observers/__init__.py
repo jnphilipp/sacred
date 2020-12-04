@@ -13,7 +13,7 @@ from sacred.observers.gcs_observer import GoogleCloudStorageObserver
 
 __all__ = (
     "FileStorageObserver",
-    "JSONObserver"
+    "JSONObserver",
     "RunObserver",
     "MongoObserver",
     "QueuedMongoObserver",
